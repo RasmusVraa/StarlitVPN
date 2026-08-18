@@ -164,6 +164,20 @@ async function disconnect() {
   return session;
 }
 
+function isAnnounceNode(n) {
+  const text = `${n?.name || ""} ${n?.remark || ""}`;
+  return /не поддерж|not supported|unsupported|обновите приложен|приложение устарело|update (the )?app|update required/i.test(text);
+}
+
+async function dropAnnounceNodes() {
+  const state = await loadState();
+  const nodes = (state.nodes || []).filter((n) => !isAnnounceNode(n));
+  if (nodes.length === state.nodes.length) return false;
+  const selectedId = nodes.some((n) => n.id === state.selectedId) ? state.selectedId : (nodes[0]?.id || null);
+  await saveState({ nodes, selectedId });
+  return true;
+}
+
 async function importText(text, groupId = null, groupName = "") {
   const trimmed = String(text || "").trim();
   const first = trimmed.split(/\s+/)[0];
@@ -177,7 +191,7 @@ async function importText(text, groupId = null, groupName = "") {
     gid = crypto.randomUUID();
     groups = groups.concat([{ id: gid, name: groupName, url: "", updatedAt: Date.now() }]);
   }
-  const incoming = nodes.map((n) => ({ ...n, groupId: gid || n.groupId || null }));
+  const incoming = nodes.map((n) => ({ ...n, groupId: gid || n.groupId || null })).filter((n) => !isAnnounceNode(n));
   const existingKeys = new Set(state.nodes.map((n) => n.raw || `${n.protocol}:${n.server}:${n.port}:${n.name}`));
   const merged = state.nodes.slice();
   for (const node of incoming) {
@@ -192,7 +206,7 @@ async function importText(text, groupId = null, groupName = "") {
   return { added: incoming.length, total: merged.length };
 }
 
-const SUB_UA = "Happ/3.4.0/windows";
+const SUB_UA = (typeof StarlitConfig !== "undefined" && StarlitConfig.happUserAgent) || "Happ/3.3.6/windows";
 
 async function fetchSubscription(url) {
   const native = await nativeSend({ cmd: "fetch", url, userAgent: SUB_UA });
@@ -270,7 +284,7 @@ async function importSubscription(url, name) {
   const groups = state.groups.filter((g) => g.id !== group.id).concat([group]);
   const oldIds = new Set(state.nodes.filter((n) => n.groupId === group.id).map((n) => n.id));
   const kept = state.nodes.filter((n) => n.groupId !== group.id);
-  const parsed = StarlitUri.parseMany(body).map((n) => ({ ...n, groupId: group.id }));
+  const parsed = StarlitUri.parseMany(body).map((n) => ({ ...n, groupId: group.id })).filter((n) => !isAnnounceNode(n));
   const selectedId = state.selectedId && oldIds.has(state.selectedId) ? (parsed[0]?.id || null) : state.selectedId;
   await saveState({ nodes: kept.concat(parsed), groups, selectedId: selectedId || parsed[0]?.id || null });
   return { added: parsed.length, group };
@@ -545,6 +559,13 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const state = await loadState();
     switch (msg?.type) {
       case "getState": {
+        const storedUa = await ext.storage.local.get("subUa");
+        if (storedUa.subUa !== SUB_UA) {
+          await ext.storage.local.set({ subUa: SUB_UA });
+          try { await updateSubscriptions(); } catch { /* keep current list */ }
+        }
+        await dropAnnounceNodes();
+        const fresh = await loadState();
         let appUpdate = null;
         try {
           appUpdate = await checkUpdate(true);
@@ -553,7 +574,7 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           appUpdate = stored.appUpdate || null;
         }
         if (appUpdate?.url) applyUpdateQuietly(appUpdate);
-        return { ...state, nativeProbe: await probeNative(), appUpdate: appUpdate || null, updating: !!updateJob };
+        return { ...fresh, nativeProbe: await probeNative(), appUpdate: appUpdate || null, updating: !!updateJob };
       }
       case "checkUpdate": {
         const local = ext.runtime.getManifest().version;

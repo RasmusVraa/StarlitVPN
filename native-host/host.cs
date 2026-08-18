@@ -350,7 +350,7 @@ internal static class Program
         try
         {
             var req = (HttpWebRequest)WebRequest.Create(url);
-            req.UserAgent = string.IsNullOrEmpty(userAgent) ? "Happ/3.4.0/windows" : userAgent;
+            req.UserAgent = string.IsNullOrEmpty(userAgent) ? "Happ/3.3.6/windows" : userAgent;
             req.Accept = "*/*";
             req.Timeout = 45000;
             using (var resp = (HttpWebResponse)req.GetResponse())
