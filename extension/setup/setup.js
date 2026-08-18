@@ -8,9 +8,16 @@ function setStatus(text, ok) {
   statusEl.classList.toggle("ok", !!ok);
 }
 
+function api() {
+  if (ext?.runtime?.getURL) return ext;
+  if (globalThis.chrome?.runtime?.getURL) return globalThis.chrome;
+  if (globalThis.browser?.runtime?.getURL) return globalThis.browser;
+  throw new Error("Откройте эту вкладку кнопкой «Включить StarlitVPN» в расширении.");
+}
+
 async function nativeReady() {
   try {
-    const reply = await ext.runtime.sendNativeMessage("com.starlitvpn.host", { cmd: "status" });
+    const reply = await api().runtime.sendNativeMessage("com.starlitvpn.host", { cmd: "status" });
     return !!(reply && reply.ok && reply.missing !== true);
   } catch {
     return false;
@@ -24,21 +31,21 @@ function sleep(ms) {
 async function waitItem(id, timeout = 60000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
-    const items = await ext.downloads.search({ id });
+    const items = await api().downloads.search({ id });
     const item = items?.[0];
     if (!item) return null;
     if (item.state === "complete") return item;
     if (item.state === "interrupted") throw new Error("Скачивание прервано. В панели загрузок нажмите «Оставить».");
     await sleep(300);
   }
-  const items = await ext.downloads.search({ id });
+  const items = await api().downloads.search({ id });
   return items?.[0] || null;
 }
 
 async function pollReady() {
   for (let i = 0; i < 120; i += 1) {
     if (await nativeReady()) {
-      try { await ext.runtime.sendMessage({ type: "ensureCore" }); } catch { /* later */ }
+      try { await api().runtime.sendMessage({ type: "ensureCore" }); } catch { /* later */ }
       setStatus("Готово. Можно закрыть эту вкладку и открыть иконку StarlitVPN.", true);
       hintEl.textContent = "";
       btn.disabled = false;
@@ -52,7 +59,7 @@ async function pollReady() {
 
 btn.addEventListener("click", async () => {
   if (phase === "reload") {
-    ext.runtime.reload();
+    api().runtime.reload();
     return;
   }
   btn.disabled = true;
@@ -60,35 +67,39 @@ btn.addEventListener("click", async () => {
   try {
     if (await nativeReady()) {
       setStatus("Ядро уже включено. Закройте вкладку.", true);
+      btn.disabled = false;
       return;
     }
+    const runtime = api().runtime;
+    const downloads = api().downloads;
+    if (!downloads?.download) throw new Error("Этот браузер не умеет скачивать установщик.");
     setStatus("Скачиваем установщик…");
-    const url = ext.runtime.getURL("native/host.exe");
-    const id = await ext.downloads.download({
+    const url = runtime.getURL("native/host.exe");
+    const id = await downloads.download({
       url,
       filename: "StarlitVPN-setup.exe",
       conflictAction: "uniquify",
       saveAs: false,
     });
     await sleep(250);
-    if (ext.downloads.acceptDanger) {
-      try { await ext.downloads.acceptDanger(id); } catch { /* not dangerous or needs Keep */ }
+    if (downloads.acceptDanger) {
+      try { await downloads.acceptDanger(id); } catch { /* not dangerous or needs Keep */ }
     }
     const item = await waitItem(id);
-    if (item?.danger && item.danger !== "safe" && item.danger !== "accepted" && ext.downloads.acceptDanger) {
+    if (item?.danger && item.danger !== "safe" && item.danger !== "accepted" && downloads.acceptDanger) {
       setStatus("Chrome считает файл опасным. Подтвердите «Оставить», затем нажмите кнопку ещё раз.");
-      try { await ext.downloads.acceptDanger(id); } catch { /* user must click Keep */ }
+      try { await downloads.acceptDanger(id); } catch { /* user must click Keep */ }
     }
     setStatus("Запускаем установщик. Если Windows спросит — «Подробнее» → «Выполнить в любом случае».");
     let opened = false;
-    if (ext.downloads.open) {
+    if (downloads.open) {
       try {
-        await ext.downloads.open(id);
+        await downloads.open(id);
         opened = true;
       } catch { /* blocked */ }
     }
-    if (!opened && ext.downloads.show) {
-      try { await ext.downloads.show(id); } catch { /* ignore */ }
+    if (!opened && downloads.show) {
+      try { await downloads.show(id); } catch { /* ignore */ }
       hintEl.textContent = "Откройте папку загрузок и дважды нажмите StarlitVPN-setup.exe";
     }
     const ok = await pollReady();
