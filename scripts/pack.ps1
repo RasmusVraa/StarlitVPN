@@ -12,7 +12,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Ext "native") | Out-Null
 $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if (-not (Test-Path $csc)) { throw "csc.exe not found. Need .NET Framework 4." }
 $compiled = Join-Path $Dist "host.exe"
-& $csc /nologo /optimize /target:winexe /out:$compiled /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll $HostCs
+& $csc /nologo /optimize /target:exe /out:$compiled /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll $HostCs
 if ($LASTEXITCODE -ne 0) { throw "host.exe compile failed" }
 
 $kitZip = Join-Path $Dist "StarlitVPN.zip"

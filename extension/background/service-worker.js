@@ -54,26 +54,67 @@ async function saveState(patch) {
   await ext.storage.local.set(patch);
 }
 
+let nativePort = null;
 let nativeBusy = false;
+let nativeSince = 0;
+let nativeBackoffUntil = 0;
 const nativeQueue = [];
+
+function nativeConnect() {
+  if (nativePort) return true;
+  if (Date.now() < nativeBackoffUntil) return false;
+  if (!ext.runtime.connectNative) return false;
+  try {
+    const port = ext.runtime.connectNative(NATIVE_HOST);
+    nativePort = port;
+    nativeSince = Date.now();
+    port.onMessage.addListener((msg) => {
+      nativeBusy = false;
+      const job = nativeQueue.shift();
+      if (job) job.resolve(msg || { ok: false, error: "empty native reply" });
+      nativeFlush();
+    });
+    port.onDisconnect.addListener(() => {
+      const lived = Date.now() - nativeSince;
+      nativePort = null;
+      nativeBusy = false;
+      if (lived < 1000) {
+        nativeBackoffUntil = Date.now() + 8000;
+        const err = {
+          ok: false,
+          missing: true,
+          error: (ext.runtime.lastError && ext.runtime.lastError.message) || "native disconnect",
+        };
+        while (nativeQueue.length) nativeQueue.shift().resolve({ ...err });
+        return;
+      }
+      nativeFlush();
+    });
+    return true;
+  } catch {
+    nativeBackoffUntil = Date.now() + 8000;
+    return false;
+  }
+}
 
 function nativeFlush() {
   if (nativeBusy || !nativeQueue.length) return;
+  if (!nativeConnect()) {
+    const err = { ok: false, missing: true, error: "native host unavailable" };
+    while (nativeQueue.length) nativeQueue.shift().resolve({ ...err });
+    return;
+  }
   nativeBusy = true;
-  const job = nativeQueue[0];
-  ext.runtime.sendNativeMessage(NATIVE_HOST, job.message)
-    .then((reply) => {
-      nativeQueue.shift();
-      nativeBusy = false;
-      job.resolve(reply || { ok: false, error: "empty native reply" });
-      nativeFlush();
-    })
-    .catch((err) => {
-      nativeQueue.shift();
-      nativeBusy = false;
-      job.resolve({ ok: false, error: err.message || String(err), missing: true });
-      nativeFlush();
-    });
+  try {
+    nativePort.postMessage(nativeQueue[0].message);
+  } catch {
+    nativePort = null;
+    nativeBusy = false;
+    nativeBackoffUntil = Date.now() + 2000;
+    const job = nativeQueue.shift();
+    if (job) job.resolve({ ok: false, missing: true, error: "native disconnect" });
+    nativeFlush();
+  }
 }
 
 function nativeSend(message) {
@@ -715,7 +756,10 @@ async function pingAll() {
 }
 
 async function probeNative() {
+  if (probeNative.cache && Date.now() - probeNative.at < 2500) return probeNative.cache;
   const reply = await nativeSend({ cmd: "status" });
+  probeNative.cache = reply;
+  probeNative.at = Date.now();
   const state = await loadState();
   const session = { ...state.session, native: !reply.missing, core: reply.core || state.session.core };
   await saveState({ session });
@@ -935,16 +979,16 @@ if (ext.alarms?.onAlarm) {
     }
     if (alarm.name !== "starlit-watch") return;
     const state = await loadState();
-    if (state.settings.autoSites?.length && !state.settings.attachMode) {
-      const st = await nativeSend({ cmd: "status" });
-      if (st.running) coreWarm = true;
-      else {
-        coreWarm = false;
+    if (state.settings.attachMode) return;
+    const st = await nativeSend({ cmd: "status" });
+    if (st.running) coreWarm = true;
+    else {
+      coreWarm = false;
+      if (state.settings.autoSites?.length || state.session.connected) {
         await ensureWarm().catch(() => {});
       }
     }
     if (!state.session.connected || state.settings.attachMode) return;
-    const st = await nativeSend({ cmd: "status" });
     if (st.missing || st.running === false) {
       coreWarm = false;
       if (state.session.autoConnected) {
@@ -1080,6 +1124,7 @@ if (ext.tabs?.onRemoved) {
   ext.tabs.onRemoved.addListener(() => { maybeAutoDisconnect().catch(() => {}); });
 }
 
+nativeConnect();
 ext.storage.local.get(["settings", "session"], (stored) => {
   const settings = stored?.settings || {};
   cachedAutoSites = settings.autoSites || [];

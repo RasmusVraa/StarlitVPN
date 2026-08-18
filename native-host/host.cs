@@ -35,6 +35,7 @@ internal static class Program
     static int Main(string[] args)
     {
         Directory.CreateDirectory(AppDir);
+        HideConsole();
         Log("start args=" + string.Join(" ", args ?? new string[0]));
         try
         {
@@ -93,6 +94,8 @@ internal static class Program
 
     static void NativeLoop()
     {
+        HideConsole();
+        Log("native loop pid=" + Process.GetCurrentProcess().Id);
         var stdin = Console.OpenStandardInput();
         var stdout = Console.OpenStandardOutput();
         while (true)
@@ -102,6 +105,7 @@ internal static class Program
             var reply = Handle(raw);
             WriteMessage(stdout, reply);
         }
+        Log("native loop exit pid=" + Process.GetCurrentProcess().Id);
     }
 
     static string ReadMessage(Stream stdin)
@@ -638,7 +642,7 @@ internal static class Program
             { "pid", pid.HasValue ? (object)pid.Value : null },
             { "core", CoreInfo() },
             { "missing", false },
-            { "hostVersion", "1.0.10" },
+            { "hostVersion", "1.0.18" },
             { "hwidCapable", true }
         };
     }
@@ -1049,6 +1053,22 @@ internal static class Program
     [DllImport("kernel32.dll")]
     static extern bool CloseHandle(IntPtr hObject);
 
+    [DllImport("kernel32.dll")]
+    static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
+
+    static void HideConsole()
+    {
+        try
+        {
+            var hwnd = GetConsoleWindow();
+            if (hwnd != IntPtr.Zero) ShowWindow(hwnd, 0);
+        }
+        catch { }
+    }
 }
