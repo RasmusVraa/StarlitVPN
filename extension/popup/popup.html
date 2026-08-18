@@ -9,7 +9,7 @@
 <body>
   <aside class="rail">
     <a class="rail-logo-link" id="rail-cabinet" href="https://cabinet.starlit-moon.ru" target="_blank" rel="noopener" title="Личный кабинет">
-      <img class="rail-logo" src="../icons/logo.png" alt="StarlitVPN" width="28" height="28" />
+      <img class="rail-logo" src="../icons/logo.png" alt="StarlitVPN" width="32" height="32" />
     </a>
     <button class="rail-btn active" id="nav-servers" type="button" data-view="servers" title="Серверы">
       <span class="ico ico-globe" aria-hidden="true"></span>
@@ -24,16 +24,30 @@
   </aside>
 
   <main class="stage">
-    <header class="stage-head">
-      <div>
-        <p class="eyebrow">StarlitVPN</p>
-        <h1 id="view-title">Серверы</h1>
+    <section class="hero" id="hero">
+      <button class="power" id="btn-power" type="button" aria-label="Подключить">
+        <span class="power-ring"></span>
+        <span class="ico ico-power" aria-hidden="true"></span>
+      </button>
+      <div class="hero-copy">
+        <p class="status" id="status-label">Отключено</p>
+        <p class="hero-hint" id="power-hint">Нажмите, чтобы включить VPN</p>
       </div>
+      <button class="location" id="location-card" type="button">
+        <span class="flag dock-flag" id="dock-flag" hidden></span>
+        <span class="current" id="current-name">Выберите сервер</span>
+        <span class="location-chevron" aria-hidden="true"></span>
+      </button>
+    </section>
+
+    <div class="update-bar" id="update-bar" hidden>
+      <span id="update-text">Доступно обновление</span>
+      <button type="button" id="btn-update">Обновить</button>
+    </div>
+
+    <header class="stage-head">
+      <h1 id="view-title">Серверы</h1>
       <div class="head-actions">
-        <button class="text-btn" id="btn-check-update" type="button">
-          <span class="ico ico-download" aria-hidden="true"></span>
-          <span id="btn-check-update-label">Обновления</span>
-        </button>
         <button class="icon-btn" id="btn-ping" type="button" title="Пинг">
           <span class="ico ico-wifi ping-ico" aria-hidden="true"></span>
         </button>
@@ -42,15 +56,11 @@
         </button>
       </div>
     </header>
-    <div class="update-bar" id="update-bar" hidden>
-      <span id="update-text">Доступно обновление</span>
-      <button type="button" id="btn-update">Обновить</button>
-    </div>
 
     <section class="view on" id="view-servers">
       <label class="search" id="search-bar">
         <span class="ico ico-search" aria-hidden="true"></span>
-        <input id="search" type="search" placeholder="Поиск" autocomplete="off" />
+        <input id="search" type="search" placeholder="Поиск сервера" autocomplete="off" />
       </label>
       <div id="groups"></div>
       <ul class="list" id="server-list"></ul>
@@ -67,9 +77,9 @@
 
     <section class="view" id="view-import">
       <div class="panel">
-        <p class="panel-kicker">Только Starlit</p>
-        <h2>Подписка</h2>
-        <p class="lead">Вставьте ссылку с <strong>sub.starlit-moon.ru</strong></p>
+        <p class="panel-kicker">Шаг 1</p>
+        <h2>Подписка Starlit</h2>
+        <p class="lead">Скопируйте ссылку из кабинета — она начинается с <strong>sub.starlit-moon.ru</strong></p>
         <input id="import-url" type="url" placeholder="https://sub.starlit-moon.ru/…" spellcheck="false" autocomplete="off" />
         <input id="import-name" type="text" placeholder="Имя (необязательно)" />
         <p class="sheet-error" id="sheet-error" hidden></p>
@@ -81,6 +91,16 @@
     </section>
 
     <section class="view" id="view-settings">
+      <div class="panel">
+        <p class="panel-kicker" id="auto-sites-title">Автоподключение</p>
+        <p class="hint" id="auto-sites-hint">Сайты из списка всегда идут через VPN, без ожидания</p>
+        <div class="site-add">
+          <input id="auto-site" type="text" placeholder="youtube.com" spellcheck="false" autocomplete="off" />
+          <button class="ghost" id="btn-add-site" type="button">Добавить</button>
+        </div>
+        <p class="sheet-error" id="auto-site-error" hidden></p>
+        <ul class="site-list" id="auto-site-list"></ul>
+      </div>
       <div class="panel">
         <label>Маршрутизация
           <select id="routing">
@@ -96,22 +116,16 @@
             <option value="en">English</option>
           </select>
         </label>
-        <div class="auto-sites">
-          <p class="panel-kicker" id="auto-sites-title">Автоподключение</p>
-          <p class="hint" id="auto-sites-hint">Сайты из списка всегда идут через VPN, без ожидания</p>
-          <div class="site-add">
-            <input id="auto-site" type="text" placeholder="youtube.com" spellcheck="false" autocomplete="off" />
-            <button class="ghost" id="btn-add-site" type="button">Добавить</button>
-          </div>
-          <p class="sheet-error" id="auto-site-error" hidden></p>
-          <ul class="site-list" id="auto-site-list"></ul>
-        </div>
         <p class="hint" id="core-status"></p>
         <p class="hint" id="app-version"></p>
         <p class="hint" id="update-status"></p>
+        <button class="text-btn quiet" id="btn-check-update" type="button">
+          <span class="ico ico-download" aria-hidden="true"></span>
+          <span id="btn-check-update-label">Проверить обновления</span>
+        </button>
       </div>
       <details class="advanced">
-        <summary>Дополнительно</summary>
+        <summary>Для продвинутых</summary>
         <label class="check"><input type="checkbox" id="attachMode" /><span>Уже запущен локальный SOCKS</span></label>
         <div class="form-grid">
           <label>Хост<input id="attachHost" value="127.0.0.1" /></label>
@@ -122,22 +136,6 @@
       <div class="form-actions">
         <button class="ghost" id="btn-core" type="button">Ядро Xray</button>
         <button class="primary" id="btn-save-settings" type="button">Сохранить</button>
-      </div>
-    </section>
-
-    <a class="cabinet-btn dock-cabinet" id="btn-cabinet" href="https://cabinet.starlit-moon.ru" target="_blank" rel="noopener">
-      <span class="ico ico-person" aria-hidden="true"></span>
-      <span>Личный кабинет</span>
-    </a>
-    <section class="dock">
-      <button class="power" id="btn-power" type="button" aria-label="Connect">
-        <span class="power-ring"></span>
-        <span class="ico ico-power" aria-hidden="true"></span>
-      </button>
-      <span class="flag dock-flag" id="dock-flag" hidden></span>
-      <div class="dock-meta">
-        <p class="status" id="status-label">Отключено</p>
-        <p class="current" id="current-name">Выберите сервер</p>
       </div>
     </section>
   </main>

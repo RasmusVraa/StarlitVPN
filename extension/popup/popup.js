@@ -55,7 +55,7 @@ function applyI18n(lang) {
   const cabinet = StarlitI18n.t(loc, "cabinet");
   const rail = $("rail-cabinet");
   if (rail) rail.title = cabinet;
-  document.querySelectorAll(".cabinet-btn span").forEach((el) => {
+  document.querySelectorAll(".cabinet-btn span:not(.ico)").forEach((el) => {
     el.textContent = cabinet;
   });
   setText("setup-text", StarlitI18n.t(loc, setupBusy ? "setupWait" : "setupText"));
@@ -134,8 +134,8 @@ function setView(name) {
 function layoutChrome() {
   const hasAny = !!(state?.nodes?.length);
   const emptyServers = currentView === "servers" && !hasAny;
-  const dockCab = $("btn-cabinet");
-  if (dockCab) dockCab.hidden = emptyServers;
+  const hero = $("hero");
+  if (hero) hero.hidden = emptyServers;
   const ping = $("btn-ping");
   const subs = $("btn-subs");
   if (ping) ping.hidden = currentView !== "servers" || !hasAny;
@@ -189,6 +189,13 @@ function renderStatus() {
   }
   $("btn-power")?.classList.toggle("on", connected);
   $("btn-power")?.classList.toggle("busy", busy);
+  const power = $("btn-power");
+  if (power) power.setAttribute("aria-label", connected ? StarlitI18n.t(loc, "disconnect") : StarlitI18n.t(loc, "connect"));
+  setText("power-hint", busy
+    ? StarlitI18n.t(loc, "connecting")
+    : connected
+      ? StarlitI18n.t(loc, "tapPowerOff")
+      : StarlitI18n.t(loc, "tapPowerOn"));
   const extra = [];
   if (connected && state.session?.connectedAt) extra.push(fmtUptime(state.session.connectedAt));
   if (selected?.latency != null) extra.push(`${selected.latency}ms`);
@@ -383,6 +390,7 @@ async function refresh() {
 }
 
 on("nav-servers", "click", () => setView("servers"));
+on("location-card", "click", () => setView("servers"));
 on("btn-add", "click", () => setView("import"));
 on("empty-add", "click", () => setView("import"));
 on("btn-settings", "click", () => setView("settings"));
