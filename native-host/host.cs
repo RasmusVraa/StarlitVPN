@@ -29,6 +29,7 @@ internal static class Program
     static readonly string PidPath = Path.Combine(AppDir, "xray.pid");
     static readonly string LogPath = Path.Combine(AppDir, "xray.log");
 
+    [STAThread]
     static int Main(string[] args)
     {
         Directory.CreateDirectory(AppDir);
@@ -36,13 +37,7 @@ internal static class Program
         try
         {
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-            var forceRegister = false;
-            if (args != null)
-            {
-                foreach (var a in args)
-                    if (a == "--register" || a == "--ensure-core") forceRegister = true;
-            }
-            if (forceRegister || !InputRedirected())
+            if (!IsNativeHostLaunch(args))
             {
                 Log("register");
                 var result = Register();
@@ -61,14 +56,32 @@ internal static class Program
         catch (Exception ex)
         {
             Log(ex.ToString());
+            Notify("Ошибка установщика StarlitVPN:\n\n" + ex.Message);
             return 1;
         }
     }
 
-    static bool InputRedirected()
+    static bool IsNativeHostLaunch(string[] args)
     {
-        try { return Console.IsInputRedirected; }
-        catch { return false; }
+        if (args == null || args.Length == 0) return false;
+        foreach (var raw in args)
+        {
+            if (string.IsNullOrEmpty(raw)) continue;
+            if (raw == "--register" || raw == "--ensure-core" || raw == "--install") return false;
+            var a = raw.Trim().Trim('"');
+            if (a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase)) return true;
+            if (a.StartsWith("moz-extension://", StringComparison.OrdinalIgnoreCase)) return true;
+            if (File.Exists(a) && a.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var text = File.ReadAllText(a);
+                    if (text.IndexOf(HostName, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                }
+                catch { }
+            }
+        }
+        return false;
     }
 
     static void Log(string text)
