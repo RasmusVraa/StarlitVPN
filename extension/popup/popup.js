@@ -61,7 +61,7 @@ function applyI18n(lang) {
   setText("setup-text", StarlitI18n.t(loc, setupBusy ? "setupWait" : "setupText"));
   setText("btn-setup", StarlitI18n.t(loc, "setupTitle"));
   setText("setup-hint", StarlitI18n.t(loc, "setupHint"));
-  setText("btn-check-update", StarlitI18n.t(loc, "updateCheck"));
+  setText("btn-check-update-label", StarlitI18n.t(loc, "updateCheck"));
   const ver = ext.runtime.getManifest?.().version;
   if (ver) setText("app-version", StarlitI18n.t(loc, "appVersion").replace("{v}", ver));
   return loc;
@@ -386,19 +386,23 @@ on("btn-core", "click", async () => {
 on("btn-check-update", "click", async () => {
   const btn = $("btn-check-update");
   if (btn) btn.disabled = true;
+  setText("btn-check-update-label", StarlitI18n.t(loc, "updateChecking"));
   setText("update-status", StarlitI18n.t(loc, "updateChecking"));
   try {
     const res = await send("checkUpdate");
     if (res?.error) throw new Error(res.error);
     await refresh();
-    if (res?.update?.version) {
-      setText("update-status", StarlitI18n.t(loc, "updateAvailable").replace("{v}", res.update.version));
-    } else {
-      setText("update-status", StarlitI18n.t(loc, "updateLatest").replace("{v}", res?.local || ext.runtime.getManifest().version));
-    }
+    const msg = res?.update?.version
+      ? StarlitI18n.t(loc, "updateAvailable").replace("{v}", res.update.version)
+      : StarlitI18n.t(loc, "updateLatest").replace("{v}", res?.local || ext.runtime.getManifest().version);
+    setText("update-status", msg);
+    showToast(msg);
   } catch (err) {
-    setText("update-status", err.message || StarlitI18n.t(loc, "updateCheckFail"));
+    const msg = err.message || StarlitI18n.t(loc, "updateCheckFail");
+    setText("update-status", msg);
+    showToast(msg);
   }
+  setText("btn-check-update-label", StarlitI18n.t(loc, "updateCheck"));
   if (btn) btn.disabled = false;
 });
 function latClass(ms) {

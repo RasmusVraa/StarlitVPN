@@ -38,7 +38,7 @@ Compress-Archive -Path $stage -DestinationPath $kitZip -Force
 Remove-Item $stage -Recurse -Force
 Remove-Item $compiled -ErrorAction SilentlyContinue
 
-$ver = "1.0.3"
+$ver = "1.0.4"
 try {
   $man = Get-Content (Join-Path $Ext "manifest.json") -Raw | ConvertFrom-Json
   $ver = $man.version

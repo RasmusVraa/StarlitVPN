@@ -532,8 +532,13 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const state = await loadState();
     switch (msg?.type) {
       case "getState": {
-        const { appUpdate } = await ext.storage.local.get("appUpdate");
-        checkUpdate(false).catch(() => {});
+        let appUpdate = null;
+        try {
+          appUpdate = await checkUpdate(true);
+        } catch {
+          const stored = await ext.storage.local.get("appUpdate");
+          appUpdate = stored.appUpdate || null;
+        }
         return { ...state, nativeProbe: await probeNative(), appUpdate: appUpdate || null };
       }
       case "checkUpdate": {

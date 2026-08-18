@@ -125,7 +125,25 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .ico-search { --ico: url("../icons/ui/search.svg"); }
 .ico-power { --ico: url("../icons/ui/power.svg"); }
 .ico-person { --ico: url("../icons/ui/person.svg"); }
+.ico-download { --ico: url("../icons/ui/download.svg"); }
 .icon-btn .ico { width: 16px; height: 16px; }
+.text-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(139, 124, 255, 0.18);
+  color: var(--text);
+  font-weight: 650;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.text-btn:hover { filter: brightness(1.08); }
+.text-btn:disabled { opacity: 0.6; }
+.text-btn .ico { width: 15px; height: 15px; }
 .search .ico { width: 15px; height: 15px; }
 .power .ico { width: 22px; height: 22px; }
 .cabinet-btn .ico { width: 18px; height: 18px; background-color: #fff; }
