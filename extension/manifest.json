@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "__MSG_extDesc__",
   "homepage_url": "https://starlit-moon.ru",
   "default_locale": "ru",
@@ -32,7 +32,8 @@
     "nativeMessaging",
     "alarms",
     "downloads",
-    "downloads.open"
+    "downloads.open",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "https://sub.starlit-moon.ru/*",

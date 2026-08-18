@@ -164,9 +164,43 @@ async function disconnect() {
   return session;
 }
 
+function isAnnounceText(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (/^[🚫ℹ️⌛⚡⚠]/u.test(t)) return true;
+  if (/не поддерж|not supported|unsupported|превышено максимальное|удалите или купите слот|подписка истекла|лимита трафика|аккаунт заблокирован|обратитесь в поддержку/i.test(t)) return true;
+  if (/^(tg|web)\s*[-–—]/i.test(t)) return true;
+  if (/@starlitvpnbot/i.test(t)) return true;
+  return false;
+}
+
 function isAnnounceNode(n) {
-  const text = `${n?.name || ""} ${n?.remark || ""}`;
-  return /не поддерж|not supported|unsupported|обновите приложен|приложение устарело|update (the )?app|update required/i.test(text);
+  return isAnnounceText(n?.name) || isAnnounceText(n?.remark);
+}
+
+function subscriptionLooksLikeAnnounce(body) {
+  const raw = String(body || "");
+  let nodes = [];
+  try { nodes = StarlitUri.parseMany(raw); } catch { nodes = []; }
+  if (!nodes.length) return /не поддерж|превышено максимальное|подписка истекла|лимита трафика|заблокирован|@starlitvpnbot/i.test(raw);
+  return nodes.every(isAnnounceNode);
+}
+
+function announceError(body) {
+  const t = String(body || "");
+  if (/превышено максимальное|max.*device|купите слот/i.test(t)) {
+    return "Достигнут лимит устройств. Удалите лишнее устройство в личном кабинете.";
+  }
+  if (/не поддерж|not supported/i.test(t)) {
+    return "Панель не приняла устройство. Нажмите обновление подписки или откройте кабинет.";
+  }
+  if (/истекла|expired/i.test(t)) return "Подписка истекла. Откройте личный кабинет.";
+  if (/лимита трафика/i.test(t)) return "Закончился трафик. Откройте личный кабинет.";
+  if (/заблокирован/i.test(t)) return "Аккаунт заблокирован. Напишите в поддержку.";
+  if (/@starlitvpnbot|обратитесь в поддержку/i.test(t)) {
+    return "Панель вернула служебное сообщение вместо серверов. Откройте личный кабинет.";
+  }
+  return "Панель вернула служебное сообщение вместо серверов. Откройте личный кабинет.";
 }
 
 async function dropAnnounceNodes() {
@@ -206,7 +240,7 @@ async function importText(text, groupId = null, groupName = "") {
   return { added: incoming.length, total: merged.length };
 }
 
-const SUB_UA = (typeof StarlitConfig !== "undefined" && StarlitConfig.happUserAgent) || "Happ/3.3.6/windows";
+const SUB_UA = (typeof StarlitConfig !== "undefined" && StarlitConfig.happUserAgent) || "Happ/3.3.6/windows StarlitVPN/1.0.10";
 
 async function getDeviceHwid() {
   const stored = await ext.storage.local.get("starlitHwid");
@@ -218,6 +252,35 @@ async function getDeviceHwid() {
   if (hwid.length > 64) hwid = hwid.slice(0, 64);
   await ext.storage.local.set({ starlitHwid: hwid });
   return hwid;
+}
+
+async function ensureSubHeaderRules() {
+  const dnr = ext.declarativeNetRequest;
+  if (!dnr?.updateDynamicRules) return;
+  const hwid = await getDeviceHwid();
+  try {
+    await dnr.updateDynamicRules({
+      removeRuleIds: [91001],
+      addRules: [{
+        id: 91001,
+        priority: 1,
+        action: {
+          type: "modifyHeaders",
+          requestHeaders: [
+            { header: "User-Agent", operation: "set", value: SUB_UA },
+            { header: "x-hwid", operation: "set", value: hwid },
+            { header: "x-device-os", operation: "set", value: "Windows" },
+            { header: "x-ver-os", operation: "set", value: "10.0" },
+            { header: "x-device-model", operation: "set", value: "StarlitVPN" },
+          ],
+        },
+        condition: {
+          urlFilter: "||sub.starlit-moon.ru/",
+          resourceTypes: ["xmlhttprequest", "other", "main_frame", "sub_frame"],
+        },
+      }],
+    });
+  } catch { /* Firefox/Chrome without DNR */ }
 }
 
 function headerVal(headers, key) {
@@ -237,6 +300,7 @@ function throwIfHwidBlocked(headers, status) {
 
 async function fetchSubscription(url) {
   const hwid = await getDeviceHwid();
+  await ensureSubHeaderRules();
   const extraHeaders = {
     "x-hwid": hwid,
     "x-device-os": "Windows",
@@ -246,13 +310,16 @@ async function fetchSubscription(url) {
   const native = await nativeSend({ cmd: "fetch", url, userAgent: SUB_UA, headers: extraHeaders, ...extraHeaders });
   if (native.ok && native.body) {
     throwIfHwidBlocked(native.headers, native.status);
-    return { body: native.body, headers: native.headers || {} };
+    if (!subscriptionLooksLikeAnnounce(native.body)) {
+      return { body: native.body, headers: native.headers || {} };
+    }
   }
-  if (native.status && !native.missing) {
+  if (native.status && !native.missing && native.status !== 200) {
     throwIfHwidBlocked(native.headers, native.status);
-    throw new Error(`Подписка HTTP ${native.status}`);
+    if (!subscriptionLooksLikeAnnounce(native.body || "")) throw new Error(`Подписка HTTP ${native.status}`);
   }
 
+  await ensureSubHeaderRules();
   let res;
   try {
     res = await fetch(url, {
@@ -260,6 +327,7 @@ async function fetchSubscription(url) {
       headers: { "User-Agent": SUB_UA, Accept: "*/*", ...extraHeaders },
     });
   } catch (err) {
+    if (native.ok && native.body) throw new Error(announceError(native.body));
     throw new Error(native.missing
       ? `Не удалось скачать подписку (${err.message}). Панель отвечает 502 на запросы браузера — установите native-host.`
       : (native.error || err.message));
@@ -275,11 +343,14 @@ async function fetchSubscription(url) {
   };
   throwIfHwidBlocked(headers, res.status);
   if (!res.ok) {
+    if (native.ok && native.body) throw new Error(announceError(native.body));
     throw new Error(res.status === 502
       ? "Панель подписки отвечает 502 браузеру. Перезапустите браузер после native-host/install.ps1 — запрос пойдёт как у Happ."
       : `Подписка HTTP ${res.status}`);
   }
-  return { body: await res.text(), headers };
+  const body = await res.text();
+  if (subscriptionLooksLikeAnnounce(body)) throw new Error(announceError(body));
+  return { body, headers };
 }
 
 function parseUserInfo(header) {
@@ -324,6 +395,7 @@ async function importSubscription(url, name) {
   const oldIds = new Set(state.nodes.filter((n) => n.groupId === group.id).map((n) => n.id));
   const kept = state.nodes.filter((n) => n.groupId !== group.id);
   const parsed = StarlitUri.parseMany(body).map((n) => ({ ...n, groupId: group.id })).filter((n) => !isAnnounceNode(n));
+  if (!parsed.length) throw new Error(announceError(body));
   const selectedId = state.selectedId && oldIds.has(state.selectedId) ? (parsed[0]?.id || null) : state.selectedId;
   await saveState({ nodes: kept.concat(parsed), groups, selectedId: selectedId || parsed[0]?.id || null });
   return { added: parsed.length, group };
@@ -598,9 +670,10 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const state = await loadState();
     switch (msg?.type) {
       case "getState": {
-        const storedUa = await ext.storage.local.get(["subUa", "hwidFetch"]);
-        if (storedUa.subUa !== SUB_UA || !storedUa.hwidFetch) {
-          await ext.storage.local.set({ subUa: SUB_UA, hwidFetch: true });
+        await ensureSubHeaderRules();
+        const storedUa = await ext.storage.local.get(["subUa", "hwidFetch2"]);
+        if (storedUa.subUa !== SUB_UA || !storedUa.hwidFetch2) {
+          await ext.storage.local.set({ subUa: SUB_UA, hwidFetch2: true });
           try { await updateSubscriptions(); } catch { /* keep current list */ }
         }
         await dropAnnounceNodes();

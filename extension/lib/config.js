@@ -3,7 +3,7 @@ const StarlitConfig = {
   cabinet: "https://cabinet.starlit-moon.ru",
   githubRepo: "RasmusVraa/StarlitVPN",
   updateAsset: "StarlitVPN.zip",
-  happUserAgent: "Happ/3.3.6/windows",
+  happUserAgent: "Happ/3.3.6/windows StarlitVPN/1.0.10",
 };
 
 StarlitConfig.normalizeSubscriptionUrl = function normalizeSubscriptionUrl(input) {

@@ -352,14 +352,14 @@ internal static class Program
         try
         {
             var req = (HttpWebRequest)WebRequest.Create(url);
-            req.UserAgent = string.IsNullOrEmpty(userAgent) ? "Happ/3.3.6/windows" : userAgent;
+            req.UserAgent = string.IsNullOrEmpty(userAgent) ? "Happ/3.3.6/windows StarlitVPN/1.0.10" : userAgent;
             req.Accept = "*/*";
             req.Timeout = 45000;
             var hwid = DeviceHwid(HeaderFromMsg(msg, "x-hwid"));
-            req.Headers["x-hwid"] = hwid;
-            req.Headers["x-device-os"] = FirstNonEmpty(HeaderFromMsg(msg, "x-device-os"), "Windows");
-            req.Headers["x-ver-os"] = FirstNonEmpty(HeaderFromMsg(msg, "x-ver-os"), Environment.OSVersion.Version.ToString());
-            req.Headers["x-device-model"] = FirstNonEmpty(HeaderFromMsg(msg, "x-device-model"), "StarlitVPN");
+            TrySetHeader(req, "x-hwid", hwid);
+            TrySetHeader(req, "x-device-os", FirstNonEmpty(HeaderFromMsg(msg, "x-device-os"), "Windows"));
+            TrySetHeader(req, "x-ver-os", FirstNonEmpty(HeaderFromMsg(msg, "x-ver-os"), Environment.OSVersion.Version.ToString()));
+            TrySetHeader(req, "x-device-model", FirstNonEmpty(HeaderFromMsg(msg, "x-device-model"), "StarlitVPN"));
             using (var resp = (HttpWebResponse)req.GetResponse())
             using (var stream = resp.GetResponseStream())
             using (var ms = new MemoryStream())
@@ -397,6 +397,13 @@ internal static class Program
         {
             return Fail(ex.Message);
         }
+    }
+
+    static void TrySetHeader(HttpWebRequest req, string name, string value)
+    {
+        if (req == null || string.IsNullOrEmpty(name) || string.IsNullOrEmpty(value)) return;
+        try { req.Headers.Remove(name); } catch { }
+        try { req.Headers.Add(name, value); } catch { try { req.Headers[name] = value; } catch { } }
     }
 
     static Dictionary<string, object> CollectSubHeaders(HttpWebResponse resp)
@@ -474,7 +481,9 @@ internal static class Program
             { "running", pid.HasValue },
             { "pid", pid.HasValue ? (object)pid.Value : null },
             { "core", CoreInfo() },
-            { "missing", false }
+            { "missing", false },
+            { "hostVersion", "1.0.10" },
+            { "hwidCapable", true }
         };
     }
 

@@ -191,7 +191,7 @@ def start_xray(config: dict, port: int | None = None) -> dict:
     }
 
 
-HAPP_UA = "Happ/3.3.6/windows"
+HAPP_UA = "Happ/3.3.6/windows StarlitVPN/1.0.10"
 
 
 def fetch_url(url: str, user_agent: str | None = None) -> dict:
