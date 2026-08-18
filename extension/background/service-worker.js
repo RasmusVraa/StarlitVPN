@@ -54,60 +54,26 @@ async function saveState(patch) {
   await ext.storage.local.set(patch);
 }
 
-let nativePort = null;
 let nativeBusy = false;
 const nativeQueue = [];
 
-function nativeAttach(port) {
-  nativePort = port;
-  port.onMessage.addListener((msg) => {
-    const job = nativeQueue[0];
-    if (!job) return;
-    nativeQueue.shift();
-    nativeBusy = false;
-    job.resolve(msg || { ok: false, error: "empty native reply" });
-    nativeFlush();
-  });
-  port.onDisconnect.addListener(() => {
-    nativePort = null;
-    nativeBusy = false;
-    const err = {
-      ok: false,
-      error: (ext.runtime.lastError && ext.runtime.lastError.message) || "native disconnect",
-      missing: true,
-    };
-    while (nativeQueue.length) nativeQueue.shift().resolve({ ...err });
-  });
-}
-
-function nativeEnsure() {
-  if (nativePort) return true;
-  if (!ext.runtime.connectNative) return false;
-  try {
-    nativeAttach(ext.runtime.connectNative(NATIVE_HOST));
-    return !!nativePort;
-  } catch {
-    return false;
-  }
-}
-
 function nativeFlush() {
   if (nativeBusy || !nativeQueue.length) return;
-  if (!nativeEnsure()) {
-    const job = nativeQueue.shift();
-    ext.runtime.sendNativeMessage(NATIVE_HOST, job.message)
-      .then((reply) => job.resolve(reply || { ok: false, error: "empty native reply" }))
-      .catch((err) => job.resolve({ ok: false, error: err.message || String(err), missing: true }));
-    return;
-  }
   nativeBusy = true;
-  try {
-    nativePort.postMessage(nativeQueue[0].message);
-  } catch {
-    nativeBusy = false;
-    nativePort = null;
-    nativeFlush();
-  }
+  const job = nativeQueue[0];
+  ext.runtime.sendNativeMessage(NATIVE_HOST, job.message)
+    .then((reply) => {
+      nativeQueue.shift();
+      nativeBusy = false;
+      job.resolve(reply || { ok: false, error: "empty native reply" });
+      nativeFlush();
+    })
+    .catch((err) => {
+      nativeQueue.shift();
+      nativeBusy = false;
+      job.resolve({ ok: false, error: err.message || String(err), missing: true });
+      nativeFlush();
+    });
 }
 
 function nativeSend(message) {
@@ -394,7 +360,7 @@ async function connect(nodeId, opts = {}) {
       const config = StarlitXray.buildConfig(node, state.settings);
       const started = await nativeSend({
         cmd: "start",
-        force: state.session.warmNodeId && state.session.warmNodeId !== node.id,
+        force: false,
         config,
         configText: JSON.stringify(config),
         port,
@@ -1114,7 +1080,6 @@ if (ext.tabs?.onRemoved) {
   ext.tabs.onRemoved.addListener(() => { maybeAutoDisconnect().catch(() => {}); });
 }
 
-nativeEnsure();
 ext.storage.local.get(["settings", "session"], (stored) => {
   const settings = stored?.settings || {};
   cachedAutoSites = settings.autoSites || [];

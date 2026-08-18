@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Web.Script.Serialization;
 using Microsoft.Win32;
 
@@ -28,6 +29,7 @@ internal static class Program
     static readonly string CfgPath = Path.Combine(AppDir, "config.json");
     static readonly string PidPath = Path.Combine(AppDir, "xray.pid");
     static readonly string LogPath = Path.Combine(AppDir, "xray.log");
+    static readonly Mutex XrayGate = new Mutex(false, "Local\\StarlitVPN-xray-gate");
 
     [STAThread]
     static int Main(string[] args)
@@ -141,8 +143,8 @@ internal static class Program
             var cmd = Str(msg, "cmd");
             if (cmd == "status") return Status();
             if (cmd == "ensure_core") return EnsureCore();
-            if (cmd == "start") return StartXray(Str(msg, "configText"), msg.ContainsKey("config") ? msg["config"] : null, IntVal(msg, "port"), Flag(msg, "force"));
-            if (cmd == "stop") return StopXray();
+            if (cmd == "start") return WithXrayGate(() => StartXray(Str(msg, "configText"), msg.ContainsKey("config") ? msg["config"] : null, IntVal(msg, "port"), Flag(msg, "force")));
+            if (cmd == "stop") return WithXrayGate(() => StopXray());
             if (cmd == "ping") return TcpPing(Str(msg, "host"), IntVal(msg, "port"));
             if (cmd == "fetch") return FetchUrl(msg);
             if (cmd == "register") return Register();
@@ -267,6 +269,25 @@ internal static class Program
         return string.Equals(s, "true", StringComparison.OrdinalIgnoreCase) || s == "1";
     }
 
+    static Dictionary<string, object> WithXrayGate(Func<Dictionary<string, object>> fn)
+    {
+        var owned = false;
+        try
+        {
+            try { owned = XrayGate.WaitOne(20000); }
+            catch (AbandonedMutexException) { owned = true; }
+            if (!owned) return Fail("Xray занят, повторите");
+            return fn();
+        }
+        finally
+        {
+            if (owned)
+            {
+                try { XrayGate.ReleaseMutex(); } catch { }
+            }
+        }
+    }
+
     static Dictionary<string, object> StartXray(string configText, object configObj, int port, bool force)
     {
         var ready = EnsureCore();
@@ -300,35 +321,49 @@ internal static class Program
         PatchLogPath();
         if (!force)
         {
-            var live = CurrentPid();
+            var live = LiveXrayPid();
             if (live.HasValue)
             {
-                var reused = OkCore();
-                reused["running"] = true;
-                reused["pid"] = live.Value;
-                reused["reused"] = true;
-                reused["port"] = port;
-                return reused;
+                Log("start reuse pid=" + live.Value);
+                try { File.WriteAllText(PidPath, live.Value.ToString(), Encoding.UTF8); } catch { }
+                return ReuseResult(live.Value, port);
+            }
+            if (PortOpen(port > 0 ? port : 10808))
+            {
+                Log("start reuse port " + port);
+                return ReuseResult(0, port);
             }
         }
         StopXray();
+        WaitPortFree(port > 0 ? port : 10808, 2000);
         var cmd = "\"" + XrayBin() + "\" run -c \"" + CfgPath + "\"";
         int pid;
         if (!StartDetached(XrayBin(), cmd, CoreDir, out pid))
             return Fail("Не удалось запустить Xray");
         File.WriteAllText(PidPath, pid.ToString(), Encoding.UTF8);
-        for (var i = 0; i < 8; i++)
+        for (var i = 0; i < 40; i++)
         {
             System.Threading.Thread.Sleep(50);
-            if (PidAlive(pid)) break;
+            if (!PidAlive(pid)) break;
+            if (PortOpen(port > 0 ? port : 10808)) break;
         }
-        if (!PidAlive(pid))
-            return Fail("Xray сразу завершился" + TailLog());
-        var st = OkCore();
-        st["running"] = true;
-        st["pid"] = pid;
-        st["port"] = port;
-        return st;
+        if (PidAlive(pid))
+        {
+            Log("start pid=" + pid);
+            var st = OkCore();
+            st["running"] = true;
+            st["pid"] = pid;
+            st["port"] = port;
+            return st;
+        }
+        var leftover = LiveXrayPid();
+        if (leftover.HasValue || PortOpen(port > 0 ? port : 10808))
+        {
+            Log("start recovered pid=" + leftover);
+            return ReuseResult(leftover.HasValue ? leftover.Value : 0, port);
+        }
+        Log("start died pid=" + pid);
+        return Fail("Xray сразу завершился" + TailLog());
     }
 
     static void PatchLogPath()
@@ -362,23 +397,86 @@ internal static class Program
         catch { return ""; }
     }
 
+    static Dictionary<string, object> ReuseResult(int pid, int port)
+    {
+        var reused = OkCore();
+        reused["running"] = true;
+        reused["pid"] = pid;
+        reused["reused"] = true;
+        reused["port"] = port;
+        return reused;
+    }
+
+    static int? LiveXrayPid()
+    {
+        var fromFile = CurrentPid();
+        if (fromFile.HasValue) return fromFile;
+        try
+        {
+            foreach (var p in Process.GetProcessesByName("xray"))
+            {
+                try
+                {
+                    if (p.HasExited) continue;
+                    var path = p.MainModule != null ? p.MainModule.FileName : "";
+                    if (!string.IsNullOrEmpty(path) && PathsEqual(path, XrayBin()))
+                        return p.Id;
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    static bool PortOpen(int port)
+    {
+        if (port <= 0) return false;
+        try
+        {
+            using (var sock = new TcpClient())
+            {
+                var ar = sock.BeginConnect("127.0.0.1", port, null, null);
+                return ar.AsyncWaitHandle.WaitOne(200, false) && sock.Connected;
+            }
+        }
+        catch { return false; }
+    }
+
+    static void WaitPortFree(int port, int ms)
+    {
+        var until = Environment.TickCount + ms;
+        while (Environment.TickCount < until)
+        {
+            if (!PortOpen(port)) return;
+            System.Threading.Thread.Sleep(50);
+        }
+    }
+
+    static void KillPid(int pid)
+    {
+        if (pid <= 0) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "taskkill",
+                Arguments = "/PID " + pid + " /F /T",
+                CreateNoWindow = true,
+                UseShellExecute = false
+            }).WaitForExit(3000);
+        }
+        catch { }
+    }
+
     static Dictionary<string, object> StopXray()
     {
-        var pid = CurrentPid();
-        if (pid.HasValue)
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "taskkill",
-                    Arguments = "/PID " + pid.Value + " /F /T",
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                }).WaitForExit(3000);
-            }
-            catch { }
-        }
+        var pids = new Dictionary<int, bool>();
+        var cur = CurrentPid();
+        if (cur.HasValue) pids[cur.Value] = true;
+        var live = LiveXrayPid();
+        if (live.HasValue) pids[live.Value] = true;
+        foreach (var pid in pids.Keys) KillPid(pid);
         try { if (File.Exists(PidPath)) File.Delete(PidPath); } catch { }
         return new Dictionary<string, object> { { "ok", true }, { "running", false } };
     }
@@ -532,7 +630,7 @@ internal static class Program
 
     static Dictionary<string, object> Status()
     {
-        var pid = CurrentPid();
+        var pid = LiveXrayPid();
         return new Dictionary<string, object>
         {
             { "ok", true },
