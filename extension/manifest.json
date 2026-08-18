@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extName__",
+  "version": "1.0.1",
+  "description": "__MSG_extDesc__",
+  "homepage_url": "https://starlit-moon.ru",
+  "default_locale": "ru",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnwYWa1G+dYJ8F9/lCPBHFhbr3cgJ/0hnzBn/Vbg9iBsDDEe6F+rfGMH8L3QFVCvzNfhcHGRpdnnZ1Lo/uhRcer8BBUtnaGQnBdbVnHLbzq8ZFX6xTtoojPQO1a6JaxcZq1LJRqxoTXU3pTo3zujCF2HYcdzKLniKMmBAin61QXWobiPwLa6RhHxPEpYBzrNmiYZfbVuaMo5pLoidmv4HaJ9tAzDG5eYUmzZpRt9JNr+8cOTGFVf78xxuX+OqA2IRD4jVBmSWI8LpwQ9pFLXTEaBHm8y8keyeWep7WAT+EtMFVxW4c/uESCqKe6Vp2m4UXFxb5e69BipGeHtUCK18CwIDAQAB",
+  "action": {
+    "default_title": "StarlitVPN",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": [
+    "storage",
+    "proxy",
+    "nativeMessaging",
+    "alarms",
+    "downloads",
+    "downloads.open"
+  ],
+  "host_permissions": [
+    "https://sub.starlit-moon.ru/*",
+    "<all_urls>"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "starlitvpn@starlit-moon.ru",
+      "strict_min_version": "121.0"
+    }
+  }
+}

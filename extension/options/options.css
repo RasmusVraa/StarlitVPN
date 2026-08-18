@@ -1,0 +1,65 @@
+:root {
+  --bg: #070b16;
+  --card: #12192d;
+  --stroke: rgba(255,255,255,0.08);
+  --text: #eef2ff;
+  --muted: #93a0c2;
+  --accent: #7c6cff;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(900px 400px at 10% -10%, #2c1d7a 0%, transparent 50%), var(--bg);
+  color: var(--text);
+  font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 36px 20px 80px; }
+header { display: flex; gap: 14px; align-items: center; margin-bottom: 28px; }
+header img { border-radius: 12px; object-fit: cover; }
+.cabinet-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  text-decoration: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+  background: linear-gradient(180deg, #a194ff, var(--accent));
+  box-shadow: 0 14px 28px rgba(124, 108, 255, 0.32);
+}
+.cabinet-btn img { border-radius: 8px; object-fit: cover; }
+.cabinet-btn:hover { filter: brightness(1.08); }
+h1 { margin: 0; font-size: 26px; }
+header p, .hint, #core-status { color: var(--muted); }
+section {
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: 18px;
+  padding: 18px 18px 8px;
+  margin-bottom: 16px;
+}
+h2 { margin: 0 0 12px; font-size: 16px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+label { display: block; color: var(--muted); font-size: 13px; }
+input, select {
+  display: block; width: 100%; margin-top: 6px;
+  background: #0c1222; color: var(--text);
+  border: 1px solid var(--stroke); border-radius: 10px; padding: 9px 10px;
+}
+.check { display: flex; gap: 10px; align-items: flex-start; color: var(--text); margin-bottom: 14px; }
+.check input { width: auto; margin-top: 4px; }
+.row { display: flex; gap: 10px; align-items: center; margin: 8px 0 16px; }
+button {
+  background: var(--accent); color: white; border: 0; border-radius: 11px;
+  padding: 10px 14px; font-weight: 650; cursor: pointer;
+}
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--stroke); }
+code { color: #c8c0ff; }
+#saved { color: #3ee0c5; }
+@media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }

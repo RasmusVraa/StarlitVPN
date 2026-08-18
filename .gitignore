@@ -1,0 +1,26 @@
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Xray binaries and runtime
+native-host/core/
+native-host/.extension-key.pem
+*.pem
+dist/
+native-host/host.exe
+extension/native/host.exe
+native-host/python.path
+*.zip
+
+# Local runtime
+.starlit/
+config.json
+xray.exe
+xray
+geoip.dat
+geosite.dat
+wintun.dll

@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extName__",
+  "version": "1.0.1",
+  "description": "__MSG_extDesc__",
+  "homepage_url": "https://starlit-moon.ru",
+  "default_locale": "ru",
+  "action": {
+    "default_title": "StarlitVPN",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "scripts": [
+      "lib/browser.js",
+      "lib/uri.js",
+      "lib/xray-config.js",
+      "lib/config.js",
+      "lib/flags.js",
+      "background/service-worker.js"
+    ]
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": [
+    "storage",
+    "proxy",
+    "nativeMessaging",
+    "alarms",
+    "downloads",
+    "downloads.open"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "starlitvpn@starlit-moon.ru",
+      "strict_min_version": "121.0"
+    }
+  }
+}

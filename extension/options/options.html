@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StarlitVPN — настройки</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <img src="../icons/logo.png" width="48" height="48" alt="" />
+      <div>
+        <h1>StarlitVPN</h1>
+        <p>Клиент Xray для Chrome, Edge и Firefox. Серверы свои — как в Happ.</p>
+      </div>
+    </header>
+
+    <a class="cabinet-btn" id="btn-cabinet" href="https://cabinet.starlit-moon.ru" target="_blank" rel="noopener">
+      <img src="../icons/logo.png" alt="" width="22" height="22" />
+      <span>Личный кабинет</span>
+    </a>
+
+    <section>
+      <h2>Соединение</h2>
+      <label class="check">
+        <input type="checkbox" id="attachMode" />
+        <span>Не запускать ядро: только прокси браузера на локальный SOCKS (если Xray/Happ уже запущен)</span>
+      </label>
+      <div class="grid">
+        <label>Хост SOCKS
+          <input id="attachHost" value="127.0.0.1" />
+        </label>
+        <label>Порт существующего SOCKS
+          <input id="attachPort" type="number" min="1" max="65535" />
+        </label>
+        <label>Порт локального SOCKS Starlit
+          <input id="socksPort" type="number" min="1" max="65535" />
+        </label>
+        <label>Маршрутизация
+          <select id="routing">
+            <option value="bypass-private">Прокси, обход LAN</option>
+            <option value="global">Весь трафик в прокси</option>
+            <option value="bypass-lan-cn">Прокси, обход LAN и CN</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Ядро Xray</h2>
+      <p id="core-status">Проверка native host…</p>
+      <div class="row">
+        <button id="btn-core" type="button">Скачать / обновить Xray-core</button>
+        <button id="btn-status" class="ghost" type="button">Проверить статус</button>
+      </div>
+      <p class="hint">
+        Один раз выполните <code>native-host/install.ps1</code> (Windows) или
+        <code>native-host/install.sh</code> (macOS/Linux). Chrome ID расширения:
+        <code>fgefnlplpplkhobagcpieacdkghcpbdg</code>. Firefox ID:
+        <code>starlitvpn@starlit.local</code>.
+      </p>
+    </section>
+
+    <section>
+      <h2>Интерфейс</h2>
+      <label>Язык
+        <select id="language">
+          <option value="auto">Авто</option>
+          <option value="ru">Русский</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+    </section>
+
+    <div class="row">
+      <button id="btn-save" type="button">Сохранить</button>
+      <span id="saved" hidden>Сохранено</span>
+    </div>
+  </main>
+  <script src="../lib/browser.js"></script>
+  <script src="../lib/config.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
