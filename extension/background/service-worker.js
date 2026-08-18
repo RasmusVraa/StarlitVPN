@@ -208,12 +208,48 @@ async function importText(text, groupId = null, groupName = "") {
 
 const SUB_UA = (typeof StarlitConfig !== "undefined" && StarlitConfig.happUserAgent) || "Happ/3.3.6/windows";
 
+async function getDeviceHwid() {
+  const stored = await ext.storage.local.get("starlitHwid");
+  if (stored.starlitHwid && /^[a-zA-Z0-9=-]{10,64}$/.test(stored.starlitHwid)) return stored.starlitHwid;
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  let hwid = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "x").replace(/=+$/g, "");
+  if (hwid.length < 16) hwid = (hwid + "StarlitVPN12").slice(0, 16);
+  if (hwid.length > 64) hwid = hwid.slice(0, 64);
+  await ext.storage.local.set({ starlitHwid: hwid });
+  return hwid;
+}
+
+function headerVal(headers, key) {
+  if (!headers) return "";
+  return String(headers[key] || headers[key.toLowerCase()] || "");
+}
+
+function throwIfHwidBlocked(headers, status) {
+  const flag = (key) => String(headerVal(headers, key)).toLowerCase() === "true";
+  if (flag("x-hwid-max-devices-reached") || flag("x-hwid-limit")) {
+    throw new Error("Достигнут лимит устройств. Удалите лишнее устройство в личном кабинете.");
+  }
+  if (status === 404) {
+    throw new Error("Панель отклонила запрос (лимит устройств / HWID). Откройте кабинет или обновите подписку.");
+  }
+}
+
 async function fetchSubscription(url) {
-  const native = await nativeSend({ cmd: "fetch", url, userAgent: SUB_UA });
+  const hwid = await getDeviceHwid();
+  const extraHeaders = {
+    "x-hwid": hwid,
+    "x-device-os": "Windows",
+    "x-ver-os": "10.0",
+    "x-device-model": "StarlitVPN",
+  };
+  const native = await nativeSend({ cmd: "fetch", url, userAgent: SUB_UA, headers: extraHeaders, ...extraHeaders });
   if (native.ok && native.body) {
+    throwIfHwidBlocked(native.headers, native.status);
     return { body: native.body, headers: native.headers || {} };
   }
   if (native.status && !native.missing) {
+    throwIfHwidBlocked(native.headers, native.status);
     throw new Error(`Подписка HTTP ${native.status}`);
   }
 
@@ -221,26 +257,29 @@ async function fetchSubscription(url) {
   try {
     res = await fetch(url, {
       cache: "no-store",
-      headers: { "User-Agent": SUB_UA, Accept: "*/*" },
+      headers: { "User-Agent": SUB_UA, Accept: "*/*", ...extraHeaders },
     });
   } catch (err) {
     throw new Error(native.missing
       ? `Не удалось скачать подписку (${err.message}). Панель отвечает 502 на запросы браузера — установите native-host.`
       : (native.error || err.message));
   }
+  const headers = {
+    "subscription-userinfo": res.headers.get("subscription-userinfo") || "",
+    "profile-title": res.headers.get("profile-title") || "",
+    "profile-update-interval": res.headers.get("profile-update-interval") || "",
+    "x-hwid-active": res.headers.get("x-hwid-active") || "",
+    "x-hwid-not-supported": res.headers.get("x-hwid-not-supported") || "",
+    "x-hwid-max-devices-reached": res.headers.get("x-hwid-max-devices-reached") || "",
+    "x-hwid-limit": res.headers.get("x-hwid-limit") || "",
+  };
+  throwIfHwidBlocked(headers, res.status);
   if (!res.ok) {
     throw new Error(res.status === 502
       ? "Панель подписки отвечает 502 браузеру. Перезапустите браузер после native-host/install.ps1 — запрос пойдёт как у Happ."
       : `Подписка HTTP ${res.status}`);
   }
-  return {
-    body: await res.text(),
-    headers: {
-      "subscription-userinfo": res.headers.get("subscription-userinfo") || "",
-      "profile-title": res.headers.get("profile-title") || "",
-      "profile-update-interval": res.headers.get("profile-update-interval") || "",
-    },
-  };
+  return { body: await res.text(), headers };
 }
 
 function parseUserInfo(header) {
@@ -559,9 +598,9 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const state = await loadState();
     switch (msg?.type) {
       case "getState": {
-        const storedUa = await ext.storage.local.get("subUa");
-        if (storedUa.subUa !== SUB_UA) {
-          await ext.storage.local.set({ subUa: SUB_UA });
+        const storedUa = await ext.storage.local.get(["subUa", "hwidFetch"]);
+        if (storedUa.subUa !== SUB_UA || !storedUa.hwidFetch) {
+          await ext.storage.local.set({ subUa: SUB_UA, hwidFetch: true });
           try { await updateSubscriptions(); } catch { /* keep current list */ }
         }
         await dropAnnounceNodes();

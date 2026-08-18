@@ -144,7 +144,7 @@ internal static class Program
             if (cmd == "start") return StartXray(Str(msg, "configText"), msg.ContainsKey("config") ? msg["config"] : null, IntVal(msg, "port"));
             if (cmd == "stop") return StopXray();
             if (cmd == "ping") return TcpPing(Str(msg, "host"), IntVal(msg, "port"));
-            if (cmd == "fetch") return FetchUrl(Str(msg, "url"), Str(msg, "userAgent"));
+            if (cmd == "fetch") return FetchUrl(msg);
             if (cmd == "register") return Register();
             if (cmd == "self_update") return SelfUpdate(Str(msg, "url"));
             return Fail("unknown cmd: " + cmd);
@@ -345,14 +345,21 @@ internal static class Program
         }
     }
 
-    static Dictionary<string, object> FetchUrl(string url, string userAgent)
+    static Dictionary<string, object> FetchUrl(Dictionary<string, object> msg)
     {
+        var url = Str(msg, "url");
+        var userAgent = Str(msg, "userAgent");
         try
         {
             var req = (HttpWebRequest)WebRequest.Create(url);
             req.UserAgent = string.IsNullOrEmpty(userAgent) ? "Happ/3.3.6/windows" : userAgent;
             req.Accept = "*/*";
             req.Timeout = 45000;
+            var hwid = DeviceHwid(HeaderFromMsg(msg, "x-hwid"));
+            req.Headers["x-hwid"] = hwid;
+            req.Headers["x-device-os"] = FirstNonEmpty(HeaderFromMsg(msg, "x-device-os"), "Windows");
+            req.Headers["x-ver-os"] = FirstNonEmpty(HeaderFromMsg(msg, "x-ver-os"), Environment.OSVersion.Version.ToString());
+            req.Headers["x-device-model"] = FirstNonEmpty(HeaderFromMsg(msg, "x-device-model"), "StarlitVPN");
             using (var resp = (HttpWebResponse)req.GetResponse())
             using (var stream = resp.GetResponseStream())
             using (var ms = new MemoryStream())
@@ -361,20 +368,15 @@ internal static class Program
                 var bytes = ms.ToArray();
                 var truncated = bytes.Length > 4000000;
                 var text = Encoding.UTF8.GetString(bytes, 0, Math.Min(bytes.Length, 4000000));
-                var headers = new Dictionary<string, object>();
-                foreach (var key in new[] { "subscription-userinfo", "profile-title", "profile-update-interval", "profile-web-page-url" })
-                {
-                    var v = resp.Headers[key];
-                    if (!string.IsNullOrEmpty(v)) headers[key] = v;
-                }
                 return new Dictionary<string, object>
                 {
                     { "ok", true },
                     { "status", (int)resp.StatusCode },
                     { "contentType", resp.ContentType },
-                    { "headers", headers },
+                    { "headers", CollectSubHeaders(resp) },
                     { "body", text },
-                    { "truncated", truncated }
+                    { "truncated", truncated },
+                    { "hwid", hwid }
                 };
             }
         }
@@ -382,10 +384,12 @@ internal static class Program
         {
             var http = ex.Response as HttpWebResponse;
             var body = "";
+            Dictionary<string, object> headers = null;
             if (http != null)
             {
                 try { using (var sr = new StreamReader(http.GetResponseStream(), Encoding.UTF8)) body = sr.ReadToEnd(); } catch { }
-                return new Dictionary<string, object> { { "ok", false }, { "status", (int)http.StatusCode }, { "error", "HTTP " + (int)http.StatusCode }, { "body", body.Length > 4000 ? body.Substring(0, 4000) : body } };
+                headers = CollectSubHeaders(http);
+                return new Dictionary<string, object> { { "ok", false }, { "status", (int)http.StatusCode }, { "error", "HTTP " + (int)http.StatusCode }, { "body", body.Length > 4000 ? body.Substring(0, 4000) : body }, { "headers", headers } };
             }
             return Fail(ex.Message);
         }
@@ -393,6 +397,72 @@ internal static class Program
         {
             return Fail(ex.Message);
         }
+    }
+
+    static Dictionary<string, object> CollectSubHeaders(HttpWebResponse resp)
+    {
+        var headers = new Dictionary<string, object>();
+        foreach (var key in new[] {
+            "subscription-userinfo", "profile-title", "profile-update-interval", "profile-web-page-url",
+            "x-hwid-active", "x-hwid-not-supported", "x-hwid-max-devices-reached", "x-hwid-limit"
+        })
+        {
+            var v = resp.Headers[key];
+            if (!string.IsNullOrEmpty(v)) headers[key] = v;
+        }
+        return headers;
+    }
+
+    static string HeaderFromMsg(Dictionary<string, object> msg, string key)
+    {
+        if (msg == null) return "";
+        object boxed;
+        if (msg.TryGetValue(key, out boxed) && boxed != null && Convert.ToString(boxed).Length > 0)
+            return Convert.ToString(boxed);
+        if (!msg.ContainsKey("headers") || msg["headers"] == null) return "";
+        var dictObj = msg["headers"] as Dictionary<string, object>;
+        if (dictObj != null)
+        {
+            object v;
+            if (dictObj.TryGetValue(key, out v) && v != null) return Convert.ToString(v);
+            return "";
+        }
+        var dictStr = msg["headers"] as Dictionary<string, string>;
+        if (dictStr != null)
+        {
+            string v;
+            if (dictStr.TryGetValue(key, out v)) return v ?? "";
+        }
+        return "";
+    }
+
+    static string FirstNonEmpty(string a, string b)
+    {
+        return string.IsNullOrEmpty(a) ? b : a;
+    }
+
+    static string DeviceHwid(string fromClient)
+    {
+        var file = Path.Combine(AppDir, "hwid.txt");
+        if (!string.IsNullOrEmpty(fromClient) && Regex.IsMatch(fromClient, "^[a-zA-Z0-9=-]{10,64}$"))
+        {
+            try { File.WriteAllText(file, fromClient, new UTF8Encoding(false)); } catch { }
+            return fromClient;
+        }
+        try
+        {
+            if (File.Exists(file))
+            {
+                var saved = (File.ReadAllText(file) ?? "").Trim();
+                if (Regex.IsMatch(saved, "^[a-zA-Z0-9=-]{10,64}$")) return saved;
+            }
+        }
+        catch { }
+        var raw = Convert.ToBase64String(Guid.NewGuid().ToByteArray()).Replace("+", "-").Replace("/", "x").TrimEnd('=');
+        if (raw.Length < 16) raw = (raw + "StarlitVPN12").Substring(0, 16);
+        if (raw.Length > 64) raw = raw.Substring(0, 64);
+        try { File.WriteAllText(file, raw, new UTF8Encoding(false)); } catch { }
+        return raw;
     }
 
     static Dictionary<string, object> Status()
