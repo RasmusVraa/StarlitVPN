@@ -422,9 +422,14 @@ internal static class Program
                 try
                 {
                     if (p.HasExited) continue;
-                    var path = p.MainModule != null ? p.MainModule.FileName : "";
-                    if (!string.IsNullOrEmpty(path) && PathsEqual(path, XrayBin()))
-                        return p.Id;
+                    try
+                    {
+                        var path = p.MainModule != null ? p.MainModule.FileName : "";
+                        if (!string.IsNullOrEmpty(path) && !PathsEqual(path, XrayBin())) continue;
+                    }
+                    catch { }
+                    try { File.WriteAllText(PidPath, p.Id.ToString(), Encoding.UTF8); } catch { }
+                    return p.Id;
                 }
                 catch { }
             }

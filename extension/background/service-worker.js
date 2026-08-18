@@ -54,67 +54,26 @@ async function saveState(patch) {
   await ext.storage.local.set(patch);
 }
 
-let nativePort = null;
 let nativeBusy = false;
-let nativeSince = 0;
-let nativeBackoffUntil = 0;
 const nativeQueue = [];
-
-function nativeConnect() {
-  if (nativePort) return true;
-  if (Date.now() < nativeBackoffUntil) return false;
-  if (!ext.runtime.connectNative) return false;
-  try {
-    const port = ext.runtime.connectNative(NATIVE_HOST);
-    nativePort = port;
-    nativeSince = Date.now();
-    port.onMessage.addListener((msg) => {
-      nativeBusy = false;
-      const job = nativeQueue.shift();
-      if (job) job.resolve(msg || { ok: false, error: "empty native reply" });
-      nativeFlush();
-    });
-    port.onDisconnect.addListener(() => {
-      const lived = Date.now() - nativeSince;
-      nativePort = null;
-      nativeBusy = false;
-      if (lived < 1000) {
-        nativeBackoffUntil = Date.now() + 8000;
-        const err = {
-          ok: false,
-          missing: true,
-          error: (ext.runtime.lastError && ext.runtime.lastError.message) || "native disconnect",
-        };
-        while (nativeQueue.length) nativeQueue.shift().resolve({ ...err });
-        return;
-      }
-      nativeFlush();
-    });
-    return true;
-  } catch {
-    nativeBackoffUntil = Date.now() + 8000;
-    return false;
-  }
-}
 
 function nativeFlush() {
   if (nativeBusy || !nativeQueue.length) return;
-  if (!nativeConnect()) {
-    const err = { ok: false, missing: true, error: "native host unavailable" };
-    while (nativeQueue.length) nativeQueue.shift().resolve({ ...err });
-    return;
-  }
   nativeBusy = true;
-  try {
-    nativePort.postMessage(nativeQueue[0].message);
-  } catch {
-    nativePort = null;
-    nativeBusy = false;
-    nativeBackoffUntil = Date.now() + 2000;
-    const job = nativeQueue.shift();
-    if (job) job.resolve({ ok: false, missing: true, error: "native disconnect" });
-    nativeFlush();
-  }
+  const job = nativeQueue[0];
+  ext.runtime.sendNativeMessage(NATIVE_HOST, job.message)
+    .then((reply) => {
+      nativeQueue.shift();
+      nativeBusy = false;
+      job.resolve(reply || { ok: false, error: "empty native reply" });
+      nativeFlush();
+    })
+    .catch((err) => {
+      nativeQueue.shift();
+      nativeBusy = false;
+      job.resolve({ ok: false, error: err.message || String(err), missing: true });
+      nativeFlush();
+    });
 }
 
 function nativeSend(message) {
@@ -363,18 +322,9 @@ async function connect(nodeId, opts = {}) {
   });
 
   const { port, host } = proxyTarget(state);
-  if (!state.settings.attachMode) {
-    const st = await nativeSend({ cmd: "status" });
-    coreWarm = !!st.running;
-  }
-  const sameNode = coreWarm && (
-    !state.session.warmNodeId
-    || state.session.warmNodeId === node.id
-    || state.session.nodeId === node.id
-  );
 
   try {
-    if (sameNode || state.settings.attachMode) {
+    if (state.settings.attachMode) {
       await applyBrowserProxy(port, host, opts.auto ? { sites: state.settings.autoSites || [] } : {});
       autoPacInstalled = !!opts.auto;
       autoPacKey = "";
@@ -386,7 +336,7 @@ async function connect(nodeId, opts = {}) {
         nodeId: node.id,
         connectedAt: Date.now(),
         error: "",
-        native: !state.settings.attachMode,
+        native: false,
         core: state.session.core,
         autoConnected: !!opts.auto,
         warmNodeId: node.id,
@@ -396,22 +346,23 @@ async function connect(nodeId, opts = {}) {
       return session;
     }
 
-    if (!state.settings.attachMode) {
-      const config = StarlitXray.buildConfig(node, state.settings);
-      const started = await nativeSend({
-        cmd: "start",
-        force: false,
-        config,
-        configText: JSON.stringify(config),
-        port,
-      });
-      if (!started.ok) {
+    const config = StarlitXray.buildConfig(node, state.settings);
+    const started = await nativeSend({
+      cmd: "start",
+      force: true,
+      config,
+      configText: JSON.stringify(config),
+      port,
+    });
+    if (!started.ok) {
+      const again = await nativeSend({ cmd: "status" });
+      if (!again.running && !/сразу завершился/i.test(started.error || "")) {
         throw new Error(started.missing
           ? "Нажмите «Включить StarlitVPN» в окне расширения"
           : (started.error || "Не удалось запустить Xray"));
       }
-      coreWarm = true;
     }
+    coreWarm = true;
 
     await applyBrowserProxy(port, host, opts.auto ? { sites: state.settings.autoSites || [] } : {});
     autoPacInstalled = !!opts.auto;
@@ -1114,7 +1065,6 @@ if (ext.tabs?.onRemoved) {
   ext.tabs.onRemoved.addListener(() => { maybeAutoDisconnect().catch(() => {}); });
 }
 
-nativeConnect();
 ext.storage.local.get(["settings", "session"], (stored) => {
   const settings = stored?.settings || {};
   cachedAutoSites = settings.autoSites || [];
