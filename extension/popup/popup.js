@@ -92,7 +92,7 @@ function techLine(node) {
   const stream = outbound?.streamSettings || {};
   let proto = String(node.protocol || outbound?.protocol || "").toUpperCase();
   if (proto === "SHADOWSOCKS") proto = "SS";
-  if (proto === "HYSTERIA") proto = "HYSTERIA2";
+  if (proto === "HYSTERIA" || proto === "HYSTERIA2") proto = "HYSTERIA2";
   let net = (node.network || stream.network || "tcp").toUpperCase();
   if (net === "HYSTERIA") net = "UDP";
   let sec = (node.security || stream.security || "").toUpperCase();

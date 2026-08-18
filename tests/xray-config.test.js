@@ -29,5 +29,14 @@ if (proxy.protocol !== "vless") throw new Error("protocol");
 if (proxy.streamSettings.security !== "reality") throw new Error("reality");
 if (proxy.streamSettings.realitySettings.publicKey !== "PUB") throw new Error("pbk");
 if (cfg.inbounds[0].port !== 10808) throw new Error("port");
+
+const hy = parseOne("hy2://secret@hy.example.com:443?sni=hy.example.com&insecure=0#LT");
+const hyCfg = buildConfig(hy, { socksPort: 10808 });
+const hyOut = hyCfg.outbounds.find((o) => o.tag === "proxy");
+if (hyOut.protocol !== "hysteria") throw new Error("hy protocol");
+if (hyOut.settings.version !== 2 || hyOut.settings.address !== "hy.example.com") throw new Error("hy settings");
+if (hyOut.streamSettings.network !== "hysteria") throw new Error("hy network");
+if (hyOut.streamSettings.hysteriaSettings.auth !== "secret") throw new Error("hy auth");
 console.log("ok   xray reality outbound");
+console.log("ok   xray hysteria2 outbound");
 console.log("all config tests passed");

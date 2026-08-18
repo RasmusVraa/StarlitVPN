@@ -152,29 +152,34 @@
         },
       };
     }
-    if (protocol === "hysteria2") {
+    if (protocol === "hysteria2" || protocol === "hysteria") {
+      const stream = {
+        network: "hysteria",
+        security: "tls",
+        tlsSettings: {
+          serverName: node.sni || node.server,
+          allowInsecure: !!node.allowInsecure,
+          alpn: ["h3"],
+        },
+        hysteriaSettings: {
+          version: 2,
+          auth: node.password || "",
+        },
+      };
+      if (node.obfs && /salamander/i.test(node.obfs) && node.obfsPassword) {
+        stream.finalmask = {
+          udp: [{ type: "salamander", settings: { password: node.obfsPassword } }],
+        };
+      }
       return {
         tag: "proxy",
-        protocol: "hysteria2",
+        protocol: "hysteria",
         settings: {
-          servers: [{
-            address: node.server,
-            port: Number(node.port),
-            password: node.password,
-          }],
+          version: 2,
+          address: node.server,
+          port: Number(node.port),
         },
-        streamSettings: {
-          network: "tcp",
-          security: "tls",
-          tlsSettings: {
-            serverName: node.sni || node.server,
-            allowInsecure: !!node.allowInsecure,
-          },
-        },
-        extra: node.obfs ? {
-          type: node.obfs,
-          password: node.obfsPassword || "",
-        } : undefined,
+        streamSettings: stream,
       };
     }
     throw new Error("Нельзя собрать outbound для " + protocol);

@@ -288,20 +288,52 @@ internal static class Program
             catch { }
         }
         File.WriteAllText(CfgPath, configText, new UTF8Encoding(false));
+        PatchLogPath();
         StopXray();
         var cmd = "\"" + XrayBin() + "\" run -c \"" + CfgPath + "\"";
         int pid;
         if (!StartDetached(XrayBin(), cmd, CoreDir, out pid))
             return Fail("Не удалось запустить Xray");
         File.WriteAllText(PidPath, pid.ToString(), Encoding.UTF8);
-        System.Threading.Thread.Sleep(500);
+        System.Threading.Thread.Sleep(800);
         if (!PidAlive(pid))
-            return Fail("Xray сразу завершился");
+            return Fail("Xray сразу завершился" + TailLog());
         var st = OkCore();
         st["running"] = true;
         st["pid"] = pid;
         st["port"] = port;
         return st;
+    }
+
+    static void PatchLogPath()
+    {
+        try
+        {
+            var text = File.ReadAllText(CfgPath);
+            var escaped = LogPath.Replace("\\", "\\\\");
+            if (text.IndexOf("\"error\"", StringComparison.Ordinal) >= 0 && text.IndexOf(escaped, StringComparison.Ordinal) >= 0)
+                return;
+            if (!Regex.IsMatch(text, "\"log\"\\s*:\\s*\\{")) return;
+            text = new Regex("(\"log\"\\s*:\\s*\\{)").Replace(text, "$1\"error\":\"" + escaped + "\",", 1);
+            File.WriteAllText(CfgPath, text, new UTF8Encoding(false));
+        }
+        catch { }
+    }
+
+    static string TailLog()
+    {
+        try
+        {
+            if (!File.Exists(LogPath)) return "";
+            var text = File.ReadAllText(LogPath);
+            if (string.IsNullOrEmpty(text)) return "";
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            var start = Math.Max(0, lines.Length - 8);
+            var chunk = string.Join(" ", lines, start, lines.Length - start).Trim();
+            if (chunk.Length > 280) chunk = chunk.Substring(chunk.Length - 280);
+            return chunk.Length > 0 ? ": " + chunk : "";
+        }
+        catch { return ""; }
     }
 
     static Dictionary<string, object> StopXray()
@@ -553,7 +585,8 @@ internal static class Program
         si.cb = Marshal.SizeOf(typeof(STARTUPINFO));
         PROCESS_INFORMATION pi;
         var flags = CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB | CREATE_NEW_PROCESS_GROUP;
-        if (!CreateProcess(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, flags, IntPtr.Zero, cwd, ref si, out pi))
+        var app = (!string.IsNullOrEmpty(fileName) && fileName.IndexOfAny(new[] { '\\', '/' }) >= 0) ? fileName : null;
+        if (!CreateProcess(app, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, flags, IntPtr.Zero, cwd, ref si, out pi))
             return false;
         pid = pi.dwProcessId;
         if (pi.hThread != IntPtr.Zero) CloseHandle(pi.hThread);

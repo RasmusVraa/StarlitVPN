@@ -182,9 +182,15 @@ async function maybeAutoConnect(url) {
 
 async function maybeAutoDisconnect() {
   const state = await loadState();
-  if (!state.session.autoConnected || !state.session.connected) return;
+  if (!state.session.autoConnected || !state.session.connected || state.session.connecting) return;
+  if (state.session.connectedAt && Date.now() - state.session.connectedAt < 10000) return;
   const sites = state.settings.autoSites || [];
-  if (await anyAutoSiteTab(sites)) return;
+  if (!sites.length) return;
+  if (!ext.tabs?.query) return;
+  const tabs = await ext.tabs.query({});
+  const httpTabs = tabs.filter((tab) => /^https?:/i.test(tab.url || ""));
+  if (!httpTabs.length) return;
+  if (httpTabs.some((tab) => urlMatchesSites(tab.url, sites))) return;
   await disconnect({ auto: true });
 }
 
