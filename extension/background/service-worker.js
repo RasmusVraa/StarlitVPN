@@ -263,11 +263,14 @@ async function installAutoPac() {
 }
 
 function markAutoBadge(on) {
+  if (fullTunnel) return;
   if (autoBadgeOn === on) return;
   autoBadgeOn = on;
   setBadge(on).catch(() => {});
   ext.storage.local.get(["session"], (stored) => {
+    if (fullTunnel) return;
     const session = { ...DEFAULT_STATE.session, ...(stored.session || {}) };
+    if (session.connected && !session.autoConnected) return;
     session.connected = !!on;
     session.autoConnected = !!on;
     session.connecting = false;
@@ -295,13 +298,15 @@ async function ensureWarm() {
     const node = state.nodes.find((n) => n.id === state.selectedId) || state.nodes[0];
     if (!node) return;
     if (coreWarm && state.session.warmNodeId === node.id) return;
+    if (state.session.connecting || (state.session.connected && !state.session.autoConnected)) return;
     const port = Number(state.settings.socksPort);
     const config = StarlitXray.buildConfig(node, state.settings);
     const started = await nativeSend({ cmd: "start", force: false, config, configText: JSON.stringify(config), port });
     if (!started.ok) return;
     coreWarm = true;
+    const latest = await loadState();
     await saveState({
-      session: { ...(await loadState()).session, core: started.core || null, native: true, warmNodeId: node.id },
+      session: { ...latest.session, core: started.core || null, native: true, warmNodeId: node.id },
     });
   })().finally(() => { warmJob = null; });
   return warmJob;
@@ -339,13 +344,28 @@ async function connect(nodeId, opts = {}) {
   const node = state.nodes.find((n) => n.id === nodeId) || state.nodes.find((n) => n.id === state.selectedId);
   if (!node) throw new Error("Выберите сервер");
 
+  if (!opts.auto) {
+    fullTunnel = true;
+    autoPacInstalled = false;
+    autoPacKey = "";
+    autoBadgeOn = true;
+  }
+
   await saveState({
     selectedId: node.id,
     session: { ...state.session, connecting: true, error: "", nodeId: node.id, autoConnected: !!opts.auto },
   });
 
   const { port, host } = proxyTarget(state);
-  const sameNode = coreWarm && (state.session.warmNodeId === node.id || state.session.nodeId === node.id);
+  if (!state.settings.attachMode) {
+    const st = await nativeSend({ cmd: "status" });
+    coreWarm = !!st.running;
+  }
+  const sameNode = coreWarm && (
+    !state.session.warmNodeId
+    || state.session.warmNodeId === node.id
+    || state.session.nodeId === node.id
+  );
 
   try {
     if (sameNode || state.settings.attachMode) {
