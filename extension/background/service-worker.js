@@ -35,11 +35,17 @@ let firefoxProxyHandler = null;
 
 async function loadState() {
   const stored = await ext.storage.local.get(["nodes", "groups", "selectedId", "settings", "session"]);
+  const settings = { ...DEFAULT_STATE.settings, ...(stored.settings || {}) };
+  cachedAutoSites = settings.autoSites || [];
+  cachedSocksPort = Number(settings.socksPort || 10808);
+  cachedAttachHost = settings.attachHost || "127.0.0.1";
+  cachedAttachPort = Number(settings.attachPort || 10808);
+  cachedAttachMode = !!settings.attachMode;
   return {
     nodes: stored.nodes || [],
     groups: stored.groups || [],
     selectedId: stored.selectedId || null,
-    settings: { ...DEFAULT_STATE.settings, ...(stored.settings || {}) },
+    settings,
     session: { ...DEFAULT_STATE.session, ...(stored.session || {}) },
   };
 }
@@ -167,9 +173,17 @@ async function setBadge(connected) {
 }
 
 let autoHoldUntil = 0;
-let autoJob = null;
 let warmJob = null;
 let coreWarm = false;
+let cachedAutoSites = [];
+let cachedSocksPort = 10808;
+let cachedAttachHost = "127.0.0.1";
+let cachedAttachPort = 10808;
+let cachedAttachMode = false;
+let autoPacInstalled = false;
+let autoPacKey = "";
+let fullTunnel = false;
+let autoBadgeOn = false;
 
 function normalizeSite(input) {
   let raw = String(input || "").trim().toLowerCase();
@@ -210,6 +224,8 @@ async function addAutoSite(input) {
   const state = await loadState();
   const autoSites = [...new Set([...(state.settings.autoSites || []), site])].slice(0, 80);
   await saveState({ settings: { ...state.settings, autoSites } });
+  cachedAutoSites = autoSites;
+  installAutoPac().catch(() => {});
   ensureWarm().catch(() => {});
   return { site, autoSites };
 }
@@ -219,10 +235,46 @@ async function removeAutoSite(input) {
   const state = await loadState();
   const autoSites = (state.settings.autoSites || []).filter((s) => s !== site);
   await saveState({ settings: { ...state.settings, autoSites } });
-  if (!autoSites.length && state.session.autoConnected) {
-    await disconnect({ auto: true, stopCore: true });
+  cachedAutoSites = autoSites;
+  if (!autoSites.length) {
+    autoPacInstalled = false;
+    autoPacKey = "";
+    if (!fullTunnel) await clearBrowserProxy();
+  } else if (!fullTunnel) {
+    await installAutoPac();
   }
   return { autoSites };
+}
+
+function autoProxyTarget() {
+  const port = cachedAttachMode ? cachedAttachPort : cachedSocksPort;
+  const host = cachedAttachMode ? cachedAttachHost : "127.0.0.1";
+  return { port, host };
+}
+
+async function installAutoPac() {
+  if (!cachedAutoSites.length || fullTunnel) return;
+  const { port, host } = autoProxyTarget();
+  const key = `auto|${host}|${port}|${cachedAutoSites.join(",")}`;
+  if (autoPacInstalled && autoPacKey === key) return;
+  await applyBrowserProxy(port, host, { sites: cachedAutoSites });
+  autoPacInstalled = true;
+  autoPacKey = key;
+}
+
+function markAutoBadge(on) {
+  if (autoBadgeOn === on) return;
+  autoBadgeOn = on;
+  setBadge(on).catch(() => {});
+  ext.storage.local.get(["session"], (stored) => {
+    const session = { ...DEFAULT_STATE.session, ...(stored.session || {}) };
+    session.connected = !!on;
+    session.autoConnected = !!on;
+    session.connecting = false;
+    session.error = "";
+    if (on) session.connectedAt = Date.now();
+    ext.storage.local.set({ session });
+  });
 }
 
 function proxyTarget(state) {
@@ -255,53 +307,19 @@ async function ensureWarm() {
   return warmJob;
 }
 
-async function snapAutoProxy(state) {
-  const node = state.nodes.find((n) => n.id === state.selectedId) || state.nodes[0];
-  if (!node) return;
-  const { port, host } = proxyTarget(state);
-  await applyBrowserProxy(port, host, { sites: state.settings.autoSites || [] });
-  await saveState({
-    session: {
-      ...state.session,
-      connected: true,
-      connecting: false,
-      autoConnected: true,
-      error: "",
-      nodeId: node.id,
-      connectedAt: Date.now(),
-      native: !state.settings.attachMode,
-    },
-  });
-  await setBadge(true);
-}
-
 async function maybeAutoConnect(url) {
   if (Date.now() < autoHoldUntil) return;
-  const state = await loadState();
-  const sites = state.settings.autoSites || [];
-  if (!urlMatchesSites(url, sites)) return;
-  if (state.session.connected && !state.session.autoConnected) return;
-  if (state.session.connected && state.session.autoConnected) return;
-  if (!state.nodes.length) return;
-  if (autoJob) return;
-  autoJob = (async () => {
-    if (coreWarm) {
-      await snapAutoProxy(state);
-      return;
-    }
-    await ensureWarm();
-    await snapAutoProxy(await loadState());
-  })().catch(() => {}).finally(() => { autoJob = null; });
-  return autoJob;
+  if (fullTunnel) return;
+  if (!urlMatchesSites(url, cachedAutoSites)) return;
+  markAutoBadge(true);
+  ensureWarm().catch(() => {});
 }
 
 async function maybeAutoDisconnect() {
-  const state = await loadState();
-  if (!state.session.autoConnected) return;
-  if (state.session.connecting) return;
-  const sites = state.settings.autoSites || [];
-  if (await anyAutoSiteTab(sites)) return;
-  await disconnect({ auto: true });
+  if (fullTunnel) return;
+  if (!cachedAutoSites.length) return;
+  if (await anyAutoSiteTab(cachedAutoSites)) return;
+  markAutoBadge(false);
 }
 
 function scheduleAutoDisconnect() {
@@ -332,6 +350,10 @@ async function connect(nodeId, opts = {}) {
   try {
     if (sameNode || state.settings.attachMode) {
       await applyBrowserProxy(port, host, opts.auto ? { sites: state.settings.autoSites || [] } : {});
+      autoPacInstalled = !!opts.auto;
+      autoPacKey = "";
+      fullTunnel = !opts.auto;
+      autoBadgeOn = true;
       const session = {
         connected: true,
         connecting: false,
@@ -366,6 +388,10 @@ async function connect(nodeId, opts = {}) {
     }
 
     await applyBrowserProxy(port, host, opts.auto ? { sites: state.settings.autoSites || [] } : {});
+    autoPacInstalled = !!opts.auto;
+    autoPacKey = "";
+    fullTunnel = !opts.auto;
+    autoBadgeOn = true;
     const session = {
       connected: true,
       connecting: false,
@@ -382,17 +408,26 @@ async function connect(nodeId, opts = {}) {
     return session;
   } catch (err) {
     await clearBrowserProxy();
+    autoPacInstalled = false;
+    autoPacKey = "";
+    fullTunnel = false;
+    autoBadgeOn = false;
     const session = { ...DEFAULT_STATE.session, error: err.message || String(err) };
     await saveState({ session });
     await setBadge(false);
+    if (cachedAutoSites.length) installAutoPac().catch(() => {});
     throw err;
   }
 }
 
 async function disconnect(opts = {}) {
-  if (!opts.auto) autoHoldUntil = Date.now() + 2500;
+  if (!opts.auto) autoHoldUntil = Date.now() + 1500;
   const state = await loadState();
   await clearBrowserProxy();
+  autoPacInstalled = false;
+  autoPacKey = "";
+  fullTunnel = false;
+  autoBadgeOn = false;
   const stopCore = opts.stopCore === true;
   if (stopCore && !state.settings.attachMode) {
     await nativeSend({ cmd: "stop" });
@@ -406,6 +441,9 @@ async function disconnect(opts = {}) {
   };
   await saveState({ session });
   await setBadge(false);
+  if (!stopCore && cachedAutoSites.length) {
+    await installAutoPac();
+  }
   return session;
 }
 
@@ -877,6 +915,7 @@ function applyUpdateQuietly(info) {
 
 ext.runtime.onInstalled.addListener(() => {
   checkUpdate(true).then((info) => applyUpdateQuietly(info)).catch(() => {});
+  if (cachedAutoSites.length && !fullTunnel) installAutoPac().catch(() => {});
   ensureWarm().catch(() => {});
 });
 
@@ -887,7 +926,8 @@ ext.runtime.onStartup.addListener(async () => {
     catch { await saveState({ session: { ...DEFAULT_STATE.session, error: "Не удалось восстановить соединение" } }); }
     return;
   }
-  await ensureWarm().catch(() => {});
+  if (state.settings.autoSites?.length) installAutoPac().catch(() => {});
+  ensureWarm().catch(() => {});
   try {
     const tabs = await ext.tabs.query({});
     for (const tab of tabs) {
@@ -927,7 +967,12 @@ if (ext.alarms?.onAlarm) {
       }
       await saveState({ session: { ...state.session, connected: false, error: "Xray остановился" } });
       await clearBrowserProxy();
+      autoPacInstalled = false;
+      autoPacKey = "";
+      fullTunnel = false;
+      autoBadgeOn = false;
       await setBadge(false);
+      if (cachedAutoSites.length) await installAutoPac();
     }
   });
 }
@@ -1001,6 +1046,8 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
       case "saveSettings":
         await saveState({ settings: { ...state.settings, ...msg.settings } });
+        await loadState();
+        if (!fullTunnel && cachedAutoSites.length) installAutoPac().catch(() => {});
         return { ok: true };
       case "pingNode":
         return { ok: true, ...(await pingNode(msg.id)) };
@@ -1032,19 +1079,15 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 if (ext.webNavigation?.onBeforeNavigate) {
   ext.webNavigation.onBeforeNavigate.addListener((details) => {
     if (details.frameId !== 0) return;
-    maybeAutoConnect(details.url).catch(() => {});
-    loadState().then((state) => {
-      if (!urlMatchesSites(details.url, state.settings.autoSites || [])) scheduleAutoDisconnect();
-    }).catch(() => {});
+    maybeAutoConnect(details.url);
+    if (!urlMatchesSites(details.url, cachedAutoSites)) scheduleAutoDisconnect();
   });
 }
 if (ext.tabs?.onUpdated) {
   ext.tabs.onUpdated.addListener((_id, info) => {
     if (!info.url) return;
-    maybeAutoConnect(info.url).catch(() => {});
-    loadState().then((state) => {
-      if (!urlMatchesSites(info.url, state.settings.autoSites || [])) scheduleAutoDisconnect();
-    }).catch(() => {});
+    maybeAutoConnect(info.url);
+    if (!urlMatchesSites(info.url, cachedAutoSites)) scheduleAutoDisconnect();
   });
 }
 if (ext.tabs?.onRemoved) {
@@ -1052,7 +1095,15 @@ if (ext.tabs?.onRemoved) {
 }
 
 nativeEnsure();
-ext.storage.local.get(["session"], (stored) => {
-  if (stored?.session?.warmNodeId) coreWarm = true;
+ext.storage.local.get(["settings", "session"], (stored) => {
+  const settings = stored?.settings || {};
+  cachedAutoSites = settings.autoSites || [];
+  cachedSocksPort = Number(settings.socksPort || 10808);
+  cachedAttachHost = settings.attachHost || "127.0.0.1";
+  cachedAttachPort = Number(settings.attachPort || 10808);
+  cachedAttachMode = !!settings.attachMode;
+  if (stored?.session?.connected && !stored.session.autoConnected) fullTunnel = true;
+  autoBadgeOn = !!(stored?.session?.connected);
+  if (cachedAutoSites.length && !fullTunnel) installAutoPac().catch(() => {});
   ensureWarm().catch(() => {});
 });
