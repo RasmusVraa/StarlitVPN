@@ -8,11 +8,10 @@ const StarlitConfig = {
 StarlitConfig.normalizeSubscriptionUrl = function normalizeSubscriptionUrl(input) {
   const raw = String(input || "").trim();
   if (!raw) throw new Error("Вставьте ссылку подписки");
+  if (!/^https?:\/\//i.test(raw)) throw new Error("Вставьте полную ссылку подписки");
   let url;
   try {
-    if (/^https?:\/\//i.test(raw)) url = new URL(raw);
-    else if (raw.startsWith("/")) url = new URL(`https://${StarlitConfig.subHost}${raw}`);
-    else url = new URL(`https://${StarlitConfig.subHost}/${raw.replace(/^\/+/, "")}`);
+    url = new URL(raw);
   } catch {
     throw new Error("Некорректная ссылка подписки");
   }

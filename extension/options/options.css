@@ -33,7 +33,16 @@ header img { border-radius: 12px; object-fit: cover; }
   background: linear-gradient(180deg, #a194ff, var(--accent));
   box-shadow: 0 14px 28px rgba(124, 108, 255, 0.32);
 }
-.cabinet-btn img { border-radius: 8px; object-fit: cover; }
+.ico {
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  background-color: #fff;
+  -webkit-mask: var(--ico) center / contain no-repeat;
+  mask: var(--ico) center / contain no-repeat;
+}
+.ico-person { --ico: url("../icons/ui/person.svg"); }
 .cabinet-btn:hover { filter: brightness(1.08); }
 h1 { margin: 0; font-size: 26px; }
 header p, .hint, #core-status { color: var(--muted); }

@@ -12,14 +12,14 @@
       <img class="rail-logo" src="../icons/logo.png" alt="StarlitVPN" width="28" height="28" />
     </a>
     <button class="rail-btn active" id="nav-servers" type="button" data-view="servers" title="Серверы">
-      <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 12h16M12 4c2.8 2.8 2.8 13.2 0 16M12 4C9.2 6.8 9.2 17.2 12 20" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      <span class="ico ico-globe" aria-hidden="true"></span>
     </button>
     <button class="rail-btn" id="btn-add" type="button" data-view="import" title="Добавить">
-      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="ico ico-plus" aria-hidden="true"></span>
     </button>
     <span class="rail-spacer"></span>
     <button class="rail-btn" id="btn-settings" type="button" data-view="settings" title="Настройки">
-      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 13.5a7.6 7.6 0 0 0 .1-3l1.6-1.2-1.6-2.8-1.9.4a7.7 7.7 0 0 0-2.6-1.5L14.6 4h-3.2l-.4 1.9a7.7 7.7 0 0 0-2.6 1.5l-1.9-.4L4.9 9.3 6.5 10.5a7.6 7.6 0 0 0 0 3L4.9 14.7l1.6 2.8 1.9-.4a7.7 7.7 0 0 0 2.6 1.5l.4 1.9h3.2l.4-1.9a7.7 7.7 0 0 0 2.6-1.5l1.9.4 1.6-2.8-1.6-1.2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <span class="ico ico-gear" aria-hidden="true"></span>
     </button>
   </aside>
 
@@ -31,14 +31,10 @@
       </div>
       <div class="head-actions">
         <button class="icon-btn" id="btn-ping" type="button" title="Пинг">
-          <svg class="ping-ico" viewBox="0 0 24 24" width="16" height="16">
-            <path class="wave w1" d="M5 13c3.6-5 10.4-5 14 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            <path class="wave w2" d="M8 16c2.2-3 5.8-3 8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            <circle class="wave w3" cx="12" cy="19.2" r="1" fill="currentColor"/>
-          </svg>
+          <span class="ico ico-wifi ping-ico" aria-hidden="true"></span>
         </button>
         <button class="icon-btn" id="btn-subs" type="button" title="Обновить">
-          <svg class="refresh-ico" viewBox="0 0 24 24" width="16" height="16"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4.5V9h-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="ico ico-refresh refresh-ico" aria-hidden="true"></span>
         </button>
       </div>
     </header>
@@ -49,7 +45,7 @@
 
     <section class="view on" id="view-servers">
       <label class="search" id="search-bar">
-        <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M16 16.5 20 20.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span class="ico ico-search" aria-hidden="true"></span>
         <input id="search" type="search" placeholder="Поиск" autocomplete="off" />
       </label>
       <div id="groups"></div>
@@ -58,7 +54,7 @@
         <img class="empty-logo" src="../icons/logo.png" alt="" width="88" height="88" />
         <p id="empty-text">Нет подписки. Откройте личный кабинет Starlit.</p>
         <a class="cabinet-btn hero" id="empty-cabinet" href="https://cabinet.starlit-moon.ru" target="_blank" rel="noopener">
-          <img src="../icons/logo.png" alt="" width="22" height="22" />
+          <span class="ico ico-person" aria-hidden="true"></span>
           <span data-i18n="cabinet">Личный кабинет</span>
         </a>
         <button class="empty-link" id="empty-add" type="button">Добавить подписку</button>
@@ -70,10 +66,7 @@
         <p class="panel-kicker">Только Starlit</p>
         <h2>Подписка</h2>
         <p class="lead">Вставьте ссылку с <strong>sub.starlit-moon.ru</strong></p>
-        <label class="url-field">
-          <span>https://sub.starlit-moon.ru/</span>
-          <input id="import-url" type="text" placeholder="ключ подписки" spellcheck="false" />
-        </label>
+        <input id="import-url" type="url" placeholder="https://sub.starlit-moon.ru/…" spellcheck="false" autocomplete="off" />
         <input id="import-name" type="text" placeholder="Имя (необязательно)" />
         <p class="sheet-error" id="sheet-error" hidden></p>
       </div>
@@ -117,13 +110,13 @@
     </section>
 
     <a class="cabinet-btn dock-cabinet" id="btn-cabinet" href="https://cabinet.starlit-moon.ru" target="_blank" rel="noopener">
-      <img src="../icons/logo.png" alt="" width="20" height="20" />
+      <span class="ico ico-person" aria-hidden="true"></span>
       <span>Личный кабинет</span>
     </a>
     <section class="dock">
       <button class="power" id="btn-power" type="button" aria-label="Connect">
         <span class="power-ring"></span>
-        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3.2v8.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M8.1 6.6a6.8 6.8 0 1 0 7.8 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="ico ico-power" aria-hidden="true"></span>
       </button>
       <span class="flag dock-flag" id="dock-flag" hidden></span>
       <div class="dock-meta">

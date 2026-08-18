@@ -17,10 +17,14 @@ function eq(name, actual, expected) {
 
 eq("host", subHost, "sub.starlit-moon.ru");
 eq("full", normalizeSubscriptionUrl("https://sub.starlit-moon.ru/abc"), "https://sub.starlit-moon.ru/abc");
-eq("token", normalizeSubscriptionUrl("1MJQjt7897fuyKQ7"), "https://sub.starlit-moon.ru/1MJQjt7897fuyKQ7");
-eq("path", normalizeSubscriptionUrl("/key"), "https://sub.starlit-moon.ru/key");
 
 let threw = false;
+try { normalizeSubscriptionUrl("1MJQjt7897fuyKQ7"); } catch { threw = true; }
+eq("token rejected", threw, true);
+threw = false;
+try { normalizeSubscriptionUrl("/key"); } catch { threw = true; }
+eq("path rejected", threw, true);
+threw = false;
 try { normalizeSubscriptionUrl("https://example.com/x"); } catch { threw = true; }
 eq("foreign host rejected", threw, true);
 threw = false;

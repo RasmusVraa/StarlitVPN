@@ -37,6 +37,10 @@ function applyI18n(lang) {
   setText("empty-text", StarlitI18n.t(loc, "noServers"));
   const search = $("search");
   if (search) search.placeholder = StarlitI18n.t(loc, "searchPlaceholder");
+  const importUrl = $("import-url");
+  if (importUrl) importUrl.placeholder = StarlitI18n.t(loc, "subUrl");
+  const importName = $("import-name");
+  if (importName) importName.placeholder = StarlitI18n.t(loc, "subName");
   const navServers = $("nav-servers");
   if (navServers) navServers.title = StarlitI18n.t(loc, "servers");
   const btnAdd = $("btn-add");
@@ -91,9 +95,7 @@ function techLine(node) {
 }
 
 function subscriptionInput() {
-  const raw = ($("import-url")?.value || "").trim();
-  if (/^https?:\/\//i.test(raw)) return raw;
-  return `https://${StarlitConfig.subHost}/${raw.replace(/^\/+/, "")}`;
+  return ($("import-url")?.value || "").trim();
 }
 
 let state = null;
