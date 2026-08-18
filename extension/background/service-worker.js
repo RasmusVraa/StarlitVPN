@@ -233,7 +233,6 @@ async function addAutoSite(input) {
   await saveState({ settings: { ...state.settings, autoSites } });
   cachedAutoSites = autoSites;
   installAutoPac().catch(() => {});
-  ensureWarm().catch(() => {});
   return { site, autoSites };
 }
 
@@ -946,7 +945,6 @@ function applyUpdateQuietly(info) {
 ext.runtime.onInstalled.addListener(() => {
   checkUpdate(true).then((info) => applyUpdateQuietly(info)).catch(() => {});
   if (cachedAutoSites.length && !fullTunnel) installAutoPac().catch(() => {});
-  ensureWarm().catch(() => {});
 });
 
 ext.runtime.onStartup.addListener(async () => {
@@ -957,7 +955,6 @@ ext.runtime.onStartup.addListener(async () => {
     return;
   }
   if (state.settings.autoSites?.length) installAutoPac().catch(() => {});
-  ensureWarm().catch(() => {});
   try {
     const tabs = await ext.tabs.query({});
     for (const tab of tabs) {
@@ -980,16 +977,10 @@ if (ext.alarms?.onAlarm) {
     if (alarm.name !== "starlit-watch") return;
     const state = await loadState();
     if (state.settings.attachMode) return;
+    if (!state.session.connected) return;
     const st = await nativeSend({ cmd: "status" });
     if (st.running) coreWarm = true;
     else {
-      coreWarm = false;
-      if (state.settings.autoSites?.length || state.session.connected) {
-        await ensureWarm().catch(() => {});
-      }
-    }
-    if (!state.session.connected || state.settings.attachMode) return;
-    if (st.missing || st.running === false) {
       coreWarm = false;
       if (state.session.autoConnected) {
         await ensureWarm().catch(() => {});
@@ -1012,7 +1003,6 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const state = await loadState();
     switch (msg?.type) {
       case "getState": {
-        ensureWarm().catch(() => {});
         await ensureSubHeaderRules();
         const storedUa = await ext.storage.local.get(["subUa", "hwidFetch2"]);
         if (storedUa.subUa !== SUB_UA || !storedUa.hwidFetch2) {
@@ -1135,5 +1125,4 @@ ext.storage.local.get(["settings", "session"], (stored) => {
   if (stored?.session?.connected && !stored.session.autoConnected) fullTunnel = true;
   autoBadgeOn = !!(stored?.session?.connected);
   if (cachedAutoSites.length && !fullTunnel) installAutoPac().catch(() => {});
-  ensureWarm().catch(() => {});
 });
