@@ -20,7 +20,7 @@ function load(file) {
 }
 
 const { parseOne } = load("uri.js").StarlitUri;
-const { buildConfig } = load("xray-config.js").StarlitXray;
+const { buildConfig, buildPac } = load("xray-config.js").StarlitXray;
 
 const node = parseOne("vless://11111111-1111-4111-8111-111111111111@example.com:443?type=tcp&security=reality&pbk=PUB&fp=chrome&sni=www.cloudflare.com&sid=ab&flow=xtls-rprx-vision#NL");
 const cfg = buildConfig(node, { socksPort: 10808, routing: "bypass-private" });
@@ -37,6 +37,10 @@ if (hyOut.protocol !== "hysteria") throw new Error("hy protocol");
 if (hyOut.settings.version !== 2 || hyOut.settings.address !== "hy.example.com") throw new Error("hy settings");
 if (hyOut.streamSettings.network !== "hysteria") throw new Error("hy network");
 if (hyOut.streamSettings.hysteriaSettings.auth !== "secret") throw new Error("hy auth");
+
+const sitePac = buildPac(10808, [], ["youtube.com"]);
+if (!sitePac.includes("youtube.com") || !sitePac.includes("DIRECT")) throw new Error("site pac");
 console.log("ok   xray reality outbound");
 console.log("ok   xray hysteria2 outbound");
+console.log("ok   site-limited PAC");
 console.log("all config tests passed");

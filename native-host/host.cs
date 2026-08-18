@@ -295,7 +295,11 @@ internal static class Program
         if (!StartDetached(XrayBin(), cmd, CoreDir, out pid))
             return Fail("Не удалось запустить Xray");
         File.WriteAllText(PidPath, pid.ToString(), Encoding.UTF8);
-        System.Threading.Thread.Sleep(800);
+        for (var i = 0; i < 8; i++)
+        {
+            System.Threading.Thread.Sleep(50);
+            if (PidAlive(pid)) break;
+        }
         if (!PidAlive(pid))
             return Fail("Xray сразу завершился" + TailLog());
         var st = OkCore();

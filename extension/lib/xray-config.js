@@ -241,7 +241,22 @@
     };
   }
 
-  function buildPac(socksPort, extraBypass = []) {
+  function buildPac(socksPort, extraBypass = [], onlyHosts = []) {
+    const port = Number(socksPort);
+    if (onlyHosts.length) {
+      const sites = onlyHosts.map((h) => JSON.stringify(h)).join(", ");
+      return `function FindProxyForURL(url, host) {
+  var h = String(host || "").toLowerCase();
+  if (h.indexOf("www.") === 0) h = h.substring(4);
+  var sites = [${sites}];
+  for (var i = 0; i < sites.length; i++) {
+    var s = sites[i];
+    if (h === s || (h.length > s.length && h.substring(h.length - s.length - 1) === "." + s))
+      return "SOCKS5 127.0.0.1:${port}";
+  }
+  return "DIRECT";
+}`;
+    }
     const bypass = ["127.0.0.1", "localhost", "[::1]", ...extraBypass]
       .map((h) => JSON.stringify(h))
       .join(", ");
@@ -257,7 +272,7 @@
     if (isInNet(ip, "192.168.0.0", "255.255.0.0")) return "DIRECT";
     if (isInNet(ip, "127.0.0.0", "255.0.0.0")) return "DIRECT";
   }
-  return "SOCKS5 127.0.0.1:${Number(socksPort)}";
+  return "SOCKS5 127.0.0.1:${port}";
 }`;
   }
 

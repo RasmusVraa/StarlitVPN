@@ -27,6 +27,7 @@ const DEFAULT_STATE = {
     native: null,
     core: null,
     autoConnected: false,
+    warmNodeId: null,
   },
 };
 
@@ -60,22 +61,26 @@ function firefoxLike() {
   return typeof browser !== "undefined" && browser.proxy && browser.proxy.onRequest;
 }
 
-async function applyBrowserProxy(port, host = "127.0.0.1") {
+async function applyBrowserProxy(port, host = "127.0.0.1", opts = {}) {
+  const sites = opts.sites || [];
   if (firefoxLike()) {
     if (firefoxProxyHandler) {
       try { browser.proxy.onRequest.removeListener(firefoxProxyHandler); } catch { /* ignore */ }
     }
-    firefoxProxyHandler = () => ({
-      type: "socks",
-      host,
-      port: Number(port),
-      proxyDNS: true,
-    });
+    firefoxProxyHandler = (details) => {
+      if (sites.length && !urlMatchesSites(details.url, sites)) return { type: "direct" };
+      return {
+        type: "socks",
+        host,
+        port: Number(port),
+        proxyDNS: true,
+      };
+    };
     browser.proxy.onRequest.addListener(firefoxProxyHandler, { urls: ["<all_urls>"] });
     return;
   }
 
-  const pac = StarlitXray.buildPac(port);
+  const pac = StarlitXray.buildPac(port, [], sites);
   await ext.proxy.settings.set({
     value: {
       mode: "pac_script",
@@ -109,6 +114,8 @@ async function setBadge(connected) {
 
 let autoHoldUntil = 0;
 let autoJob = null;
+let warmJob = null;
+let coreWarm = false;
 
 function normalizeSite(input) {
   let raw = String(input || "").trim().toLowerCase();
@@ -149,6 +156,7 @@ async function addAutoSite(input) {
   const state = await loadState();
   const autoSites = [...new Set([...(state.settings.autoSites || []), site])].slice(0, 80);
   await saveState({ settings: { ...state.settings, autoSites } });
+  ensureWarm().catch(() => {});
   return { site, autoSites };
 }
 
@@ -157,13 +165,64 @@ async function removeAutoSite(input) {
   const state = await loadState();
   const autoSites = (state.settings.autoSites || []).filter((s) => s !== site);
   await saveState({ settings: { ...state.settings, autoSites } });
+  if (!autoSites.length && state.session.autoConnected) {
+    await disconnect({ auto: true, stopCore: true });
+  }
   return { autoSites };
 }
 
-async function anyAutoSiteTab(sites) {
-  if (!sites?.length || !ext.tabs?.query) return false;
-  const tabs = await ext.tabs.query({});
-  return tabs.some((tab) => urlMatchesSites(tab.url, sites));
+function proxyTarget(state) {
+  const port = state.settings.attachMode ? Number(state.settings.attachPort) : Number(state.settings.socksPort);
+  const host = state.settings.attachMode ? state.settings.attachHost : "127.0.0.1";
+  return { port, host };
+}
+
+async function ensureWarm() {
+  if (warmJob) return warmJob;
+  warmJob = (async () => {
+    const state = await loadState();
+    if (state.settings.attachMode) {
+      coreWarm = true;
+      return;
+    }
+    if (!state.settings.autoSites?.length || !state.nodes.length) return;
+    const node = state.nodes.find((n) => n.id === state.selectedId) || state.nodes[0];
+    if (!node) return;
+    if (coreWarm && state.session.warmNodeId === node.id) {
+      const st = await nativeSend({ cmd: "status" });
+      if (st.running) return;
+      coreWarm = false;
+    }
+    const port = Number(state.settings.socksPort);
+    const config = StarlitXray.buildConfig(node, state.settings);
+    const started = await nativeSend({ cmd: "start", config, configText: JSON.stringify(config), port });
+    if (!started.ok) return;
+    coreWarm = true;
+    await saveState({
+      session: { ...(await loadState()).session, core: started.core || null, native: true, warmNodeId: node.id },
+    });
+  })().finally(() => { warmJob = null; });
+  return warmJob;
+}
+
+async function snapAutoProxy(state) {
+  const node = state.nodes.find((n) => n.id === state.selectedId) || state.nodes[0];
+  if (!node) return;
+  const { port, host } = proxyTarget(state);
+  await applyBrowserProxy(port, host, { sites: state.settings.autoSites || [] });
+  await saveState({
+    session: {
+      ...state.session,
+      connected: true,
+      connecting: false,
+      autoConnected: true,
+      error: "",
+      nodeId: node.id,
+      connectedAt: Date.now(),
+      native: !state.settings.attachMode,
+    },
+  });
+  await setBadge(true);
 }
 
 async function maybeAutoConnect(url) {
@@ -171,32 +230,35 @@ async function maybeAutoConnect(url) {
   const state = await loadState();
   const sites = state.settings.autoSites || [];
   if (!urlMatchesSites(url, sites)) return;
-  if (state.session.connected || state.session.connecting) return;
+  if (state.session.connected && !state.session.autoConnected) return;
+  if (state.session.connected && state.session.autoConnected) return;
   if (!state.nodes.length) return;
   if (autoJob) return;
-  autoJob = connect(state.selectedId, { auto: true })
-    .catch(() => {})
-    .finally(() => { autoJob = null; });
+  autoJob = (async () => {
+    await snapAutoProxy(state);
+    await ensureWarm();
+  })().catch(() => {}).finally(() => { autoJob = null; });
   return autoJob;
 }
 
 async function maybeAutoDisconnect() {
   const state = await loadState();
-  if (!state.session.autoConnected || !state.session.connected || state.session.connecting) return;
-  if (state.session.connectedAt && Date.now() - state.session.connectedAt < 10000) return;
+  if (!state.session.autoConnected) return;
+  if (state.session.connecting) return;
   const sites = state.settings.autoSites || [];
-  if (!sites.length) return;
-  if (!ext.tabs?.query) return;
-  const tabs = await ext.tabs.query({});
-  const httpTabs = tabs.filter((tab) => /^https?:/i.test(tab.url || ""));
-  if (!httpTabs.length) return;
-  if (httpTabs.some((tab) => urlMatchesSites(tab.url, sites))) return;
+  if (await anyAutoSiteTab(sites)) return;
   await disconnect({ auto: true });
 }
 
 function scheduleAutoDisconnect() {
   clearTimeout(scheduleAutoDisconnect.timer);
-  scheduleAutoDisconnect.timer = setTimeout(() => { maybeAutoDisconnect().catch(() => {}); }, 700);
+  scheduleAutoDisconnect.timer = setTimeout(() => { maybeAutoDisconnect().catch(() => {}); }, 40);
+}
+
+async function anyAutoSiteTab(sites) {
+  if (!sites?.length || !ext.tabs?.query) return false;
+  const tabs = await ext.tabs.query({});
+  return tabs.some((tab) => urlMatchesSites(tab.url, sites));
 }
 
 async function connect(nodeId, opts = {}) {
@@ -215,17 +277,25 @@ async function connect(nodeId, opts = {}) {
 
   try {
     if (!state.settings.attachMode) {
-      const config = StarlitXray.buildConfig(node, state.settings);
-      const started = await nativeSend({ cmd: "start", config, configText: JSON.stringify(config), port });
-      if (!started.ok) {
-        throw new Error(started.missing
-          ? "Нажмите «Включить StarlitVPN» в окне расширения"
-          : (started.error || "Не удалось запустить Xray"));
+      const already = coreWarm && state.session.warmNodeId === node.id
+        ? { running: true }
+        : await nativeSend({ cmd: "status" });
+      if (already.running) {
+        coreWarm = true;
+      } else {
+        const config = StarlitXray.buildConfig(node, state.settings);
+        const started = await nativeSend({ cmd: "start", config, configText: JSON.stringify(config), port });
+        if (!started.ok) {
+          throw new Error(started.missing
+            ? "Нажмите «Включить StarlitVPN» в окне расширения"
+            : (started.error || "Не удалось запустить Xray"));
+        }
+        coreWarm = true;
+        await saveState({ session: { ...(await loadState()).session, core: started.core || null, native: true, warmNodeId: node.id } });
       }
-      await saveState({ session: { ...(await loadState()).session, core: started.core || null, native: true } });
     }
 
-    await applyBrowserProxy(port, host);
+    await applyBrowserProxy(port, host, opts.auto ? { sites: state.settings.autoSites || [] } : {});
     const session = {
       connected: true,
       connecting: false,
@@ -235,6 +305,7 @@ async function connect(nodeId, opts = {}) {
       native: !state.settings.attachMode,
       core: (await loadState()).session.core,
       autoConnected: !!opts.auto,
+      warmNodeId: node.id,
     };
     await saveState({ session });
     await setBadge(true);
@@ -249,13 +320,20 @@ async function connect(nodeId, opts = {}) {
 }
 
 async function disconnect(opts = {}) {
-  if (!opts.auto) autoHoldUntil = Date.now() + 20000;
+  if (!opts.auto) autoHoldUntil = Date.now() + 2500;
   const state = await loadState();
   await clearBrowserProxy();
-  if (!state.settings.attachMode) {
+  const stopCore = !opts.auto || opts.stopCore;
+  if (stopCore && !state.settings.attachMode) {
     await nativeSend({ cmd: "stop" });
+    coreWarm = false;
   }
-  const session = { ...DEFAULT_STATE.session, native: state.session.native, core: state.session.core };
+  const session = {
+    ...DEFAULT_STATE.session,
+    native: state.session.native,
+    core: state.session.core,
+    warmNodeId: stopCore ? null : state.session.warmNodeId,
+  };
   await saveState({ session });
   await setBadge(false);
   return session;
@@ -729,15 +807,17 @@ function applyUpdateQuietly(info) {
 
 ext.runtime.onInstalled.addListener(() => {
   checkUpdate(true).then((info) => applyUpdateQuietly(info)).catch(() => {});
+  ensureWarm().catch(() => {});
 });
 
 ext.runtime.onStartup.addListener(async () => {
   const state = await loadState();
-  if (state.session.connected && state.session.nodeId) {
+  if (state.session.connected && state.session.nodeId && !state.session.autoConnected) {
     try { await connect(state.session.nodeId); }
     catch { await saveState({ session: { ...DEFAULT_STATE.session, error: "Не удалось восстановить соединение" } }); }
     return;
   }
+  await ensureWarm().catch(() => {});
   try {
     const tabs = await ext.tabs.query({});
     for (const tab of tabs) {
@@ -759,9 +839,22 @@ if (ext.alarms?.onAlarm) {
     }
     if (alarm.name !== "starlit-watch") return;
     const state = await loadState();
+    if (state.settings.autoSites?.length && !state.settings.attachMode) {
+      const st = await nativeSend({ cmd: "status" });
+      if (st.running) coreWarm = true;
+      else {
+        coreWarm = false;
+        await ensureWarm().catch(() => {});
+      }
+    }
     if (!state.session.connected || state.settings.attachMode) return;
     const st = await nativeSend({ cmd: "status" });
     if (st.missing || st.running === false) {
+      coreWarm = false;
+      if (state.session.autoConnected) {
+        await ensureWarm().catch(() => {});
+        return;
+      }
       await saveState({ session: { ...state.session, connected: false, error: "Xray остановился" } });
       await clearBrowserProxy();
       await setBadge(false);
@@ -774,6 +867,7 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const state = await loadState();
     switch (msg?.type) {
       case "getState": {
+        ensureWarm().catch(() => {});
         await ensureSubHeaderRules();
         const storedUa = await ext.storage.local.get(["subUa", "hwidFetch2"]);
         if (storedUa.subUa !== SUB_UA || !storedUa.hwidFetch2) {
@@ -869,15 +963,20 @@ if (ext.webNavigation?.onBeforeNavigate) {
   ext.webNavigation.onBeforeNavigate.addListener((details) => {
     if (details.frameId !== 0) return;
     maybeAutoConnect(details.url).catch(() => {});
+    loadState().then((state) => {
+      if (!urlMatchesSites(details.url, state.settings.autoSites || [])) scheduleAutoDisconnect();
+    }).catch(() => {});
   });
 }
 if (ext.tabs?.onUpdated) {
-  ext.tabs.onUpdated.addListener((_id, info, tab) => {
-    const url = info.url || tab?.url;
-    if (url) maybeAutoConnect(url).catch(() => {});
-    if (info.url || info.status === "complete") scheduleAutoDisconnect();
+  ext.tabs.onUpdated.addListener((_id, info) => {
+    if (!info.url) return;
+    maybeAutoConnect(info.url).catch(() => {});
+    loadState().then((state) => {
+      if (!urlMatchesSites(info.url, state.settings.autoSites || [])) scheduleAutoDisconnect();
+    }).catch(() => {});
   });
 }
 if (ext.tabs?.onRemoved) {
-  ext.tabs.onRemoved.addListener(() => scheduleAutoDisconnect());
+  ext.tabs.onRemoved.addListener(() => { maybeAutoDisconnect().catch(() => {}); });
 }
