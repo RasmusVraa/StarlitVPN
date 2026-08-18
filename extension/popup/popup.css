@@ -158,6 +158,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   overflow: hidden;
 }
 .view.on { display: flex; }
+#view-settings { overflow-y: auto; }
 
 .search {
   display: flex;
@@ -304,7 +305,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 }
 .lead { margin: 0 0 12px; color: var(--muted); }
 .lead strong { color: var(--text); font-weight: 650; }
-#import-url, #import-name, .panel select, .advanced input {
+#import-url, #import-name, .panel select, .advanced input, #auto-site {
   width: 100%;
   border: 1px solid var(--line);
   background: #101018;
@@ -354,6 +355,40 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   padding: 8px 12px 10px;
 }
 .advanced summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+
+.auto-sites { margin-top: 14px; }
+.site-add { display: flex; gap: 8px; margin-top: 8px; }
+.site-add input { flex: 1; min-width: 0; }
+.site-add .ghost { flex: none; }
+.site-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.site-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #101018;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 8px 7px 10px;
+}
+.site-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-empty { color: var(--muted); font-size: 12px; padding: 4px 0; }
+.site-del {
+  width: 26px; height: 26px; flex: none;
+  border: 0; border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.site-del:hover { background: var(--lift); color: var(--danger); }
 
 .cabinet-btn {
   display: flex;

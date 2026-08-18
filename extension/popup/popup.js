@@ -62,6 +62,11 @@ function applyI18n(lang) {
   setText("btn-setup", StarlitI18n.t(loc, "setupTitle"));
   setText("setup-hint", StarlitI18n.t(loc, "setupHint"));
   setText("btn-check-update-label", StarlitI18n.t(loc, "updateCheck"));
+  setText("auto-sites-title", StarlitI18n.t(loc, "autoSites"));
+  setText("auto-sites-hint", StarlitI18n.t(loc, "autoSitesHint"));
+  setText("btn-add-site", StarlitI18n.t(loc, "autoSiteAdd"));
+  const autoSite = $("auto-site");
+  if (autoSite) autoSite.placeholder = StarlitI18n.t(loc, "autoSitePlaceholder");
   const ver = ext.runtime.getManifest?.().version;
   if (ver) setText("app-version", StarlitI18n.t(loc, "appVersion").replace("{v}", ver));
   return loc;
@@ -249,6 +254,62 @@ function renderList() {
   `).join("");
 }
 
+function renderAutoSites() {
+  const list = $("auto-site-list");
+  if (!list) return;
+  const sites = state?.settings?.autoSites || [];
+  if (!sites.length) {
+    list.innerHTML = `<li class="site-empty">${escapeHtml(StarlitI18n.t(loc, "autoSiteEmpty"))}</li>`;
+    return;
+  }
+  list.innerHTML = sites.map((site) => `
+    <li class="site-item">
+      <span>${escapeHtml(site)}</span>
+      <button type="button" class="site-del" data-site="${escapeHtml(site)}" title="${escapeHtml(StarlitI18n.t(loc, "delete"))}">×</button>
+    </li>
+  `).join("");
+}
+
+async function addAutoSiteFromInput() {
+  const input = $("auto-site");
+  const err = $("auto-site-error");
+  if (err) err.hidden = true;
+  try {
+    const res = await send("addAutoSite", { site: (input?.value || "").trim() });
+    if (res?.error) throw new Error(res.error);
+    if (input) input.value = "";
+    if (state) state.settings = { ...(state.settings || {}), autoSites: res.autoSites || [] };
+    renderAutoSites();
+    showToast(StarlitI18n.t(loc, "saved"));
+  } catch (e) {
+    if (err) {
+      err.hidden = false;
+      err.textContent = e.message || StarlitI18n.t(loc, "autoSiteBad");
+    } else {
+      showToast(e.message || StarlitI18n.t(loc, "autoSiteBad"));
+    }
+  }
+}
+
+on("btn-add-site", "click", () => addAutoSiteFromInput());
+on("auto-site", "keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addAutoSiteFromInput();
+  }
+});
+on("auto-site-list", "click", async (e) => {
+  const btn = e.target.closest(".site-del");
+  if (!btn) return;
+  const res = await send("removeAutoSite", { site: btn.dataset.site });
+  if (res?.error) {
+    showToast(res.error);
+    return;
+  }
+  if (state) state.settings = { ...(state.settings || {}), autoSites: res.autoSites || [] };
+  renderAutoSites();
+});
+
 function fillSettings() {
   if (!state) return;
   const s = state.settings || {};
@@ -264,6 +325,7 @@ function fillSettings() {
   if (routing) routing.value = s.routing || "bypass-private";
   const language = $("language");
   if (language) language.value = s.language || "auto";
+  renderAutoSites();
   const probe = state.nativeProbe;
   setText("core-status", !probe || probe.missing
     ? StarlitI18n.t(loc, "nativeFail")

@@ -71,4 +71,6 @@ button {
 button.ghost { background: transparent; color: var(--text); border: 1px solid var(--stroke); }
 code { color: #c8c0ff; }
 #saved { color: #3ee0c5; }
+.site-list { list-style: none; padding: 0 0 12px; margin: 0; }
+.site-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; }
 @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }

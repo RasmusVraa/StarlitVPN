@@ -4,6 +4,18 @@ function send(type, payload = {}) {
 
 const fields = ["attachMode", "attachHost", "attachPort", "socksPort", "routing", "language"];
 
+let autoSites = [];
+
+function paintSites() {
+  const list = $("auto-site-list");
+  if (!list) return;
+  if (!autoSites.length) {
+    list.innerHTML = "<li class=\"hint\">Сайтов пока нет</li>";
+    return;
+  }
+  list.innerHTML = autoSites.map((site) => `<li><span>${site}</span> <button type="button" class="ghost site-del" data-site="${site}">Удалить</button></li>`).join("");
+}
+
 async function load() {
   const state = await send("getState");
   const s = state.settings || {};
@@ -13,6 +25,8 @@ async function load() {
   $("socksPort").value = s.socksPort || 10808;
   $("routing").value = s.routing || "bypass-private";
   $("language").value = s.language || "auto";
+  autoSites = s.autoSites || [];
+  paintSites();
   paintCore(state.nativeProbe);
 }
 
@@ -59,6 +73,27 @@ $("btn-core").addEventListener("click", async () => {
 $("btn-status").addEventListener("click", async () => {
   const state = await send("getState");
   paintCore(state.nativeProbe);
+});
+
+$("btn-add-site")?.addEventListener("click", async () => {
+  const input = $("auto-site");
+  const res = await send("addAutoSite", { site: (input?.value || "").trim() });
+  if (res?.error) {
+    $("saved").hidden = false;
+    $("saved").textContent = res.error;
+    return;
+  }
+  if (input) input.value = "";
+  autoSites = res.autoSites || [];
+  paintSites();
+});
+
+$("auto-site-list")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".site-del");
+  if (!btn) return;
+  const res = await send("removeAutoSite", { site: btn.dataset.site });
+  autoSites = res.autoSites || [];
+  paintSites();
 });
 
 load();

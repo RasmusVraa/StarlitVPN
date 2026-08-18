@@ -16,6 +16,7 @@ const DEFAULT_STATE = {
     attachHost: "127.0.0.1",
     attachPort: 10808,
     loglevel: "warning",
+    autoSites: [],
   },
   session: {
     connected: false,
@@ -25,6 +26,7 @@ const DEFAULT_STATE = {
     error: "",
     native: null,
     core: null,
+    autoConnected: false,
   },
 };
 
@@ -105,14 +107,101 @@ async function setBadge(connected) {
   } catch { /* older firefox */ }
 }
 
-async function connect(nodeId) {
+let autoHoldUntil = 0;
+let autoJob = null;
+
+function normalizeSite(input) {
+  let raw = String(input || "").trim().toLowerCase();
+  if (!raw) return "";
+  raw = raw.replace(/^\*:\/\//, "").replace(/^\/\//, "");
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = "https://" + raw;
+  let url;
+  try { url = new URL(raw); } catch { return ""; }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+  let host = (url.hostname || "").replace(/\.$/, "").replace(/^www\./, "");
+  if (!host || host === "localhost") return "";
+  if (host.startsWith(".") || host.endsWith(".") || host.includes("..")) return "";
+  const ip = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  if (!ip && !host.includes(".")) return "";
+  if (!ip && !/^[a-z0-9.-]+$/.test(host)) return "";
+  return host;
+}
+
+function hostFromUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
+    return u.hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function urlMatchesSites(url, sites) {
+  const host = hostFromUrl(url);
+  if (!host || !sites?.length) return false;
+  return sites.some((site) => host === site || host.endsWith("." + site));
+}
+
+async function addAutoSite(input) {
+  const site = normalizeSite(input);
+  if (!site) throw new Error("Введите домен, например youtube.com");
   const state = await loadState();
+  const autoSites = [...new Set([...(state.settings.autoSites || []), site])].slice(0, 80);
+  await saveState({ settings: { ...state.settings, autoSites } });
+  return { site, autoSites };
+}
+
+async function removeAutoSite(input) {
+  const site = normalizeSite(input) || String(input || "").trim().toLowerCase();
+  const state = await loadState();
+  const autoSites = (state.settings.autoSites || []).filter((s) => s !== site);
+  await saveState({ settings: { ...state.settings, autoSites } });
+  return { autoSites };
+}
+
+async function anyAutoSiteTab(sites) {
+  if (!sites?.length || !ext.tabs?.query) return false;
+  const tabs = await ext.tabs.query({});
+  return tabs.some((tab) => urlMatchesSites(tab.url, sites));
+}
+
+async function maybeAutoConnect(url) {
+  if (Date.now() < autoHoldUntil) return;
+  const state = await loadState();
+  const sites = state.settings.autoSites || [];
+  if (!urlMatchesSites(url, sites)) return;
+  if (state.session.connected || state.session.connecting) return;
+  if (!state.nodes.length) return;
+  if (autoJob) return;
+  autoJob = connect(state.selectedId, { auto: true })
+    .catch(() => {})
+    .finally(() => { autoJob = null; });
+  return autoJob;
+}
+
+async function maybeAutoDisconnect() {
+  const state = await loadState();
+  if (!state.session.autoConnected || !state.session.connected) return;
+  const sites = state.settings.autoSites || [];
+  if (await anyAutoSiteTab(sites)) return;
+  await disconnect({ auto: true });
+}
+
+function scheduleAutoDisconnect() {
+  clearTimeout(scheduleAutoDisconnect.timer);
+  scheduleAutoDisconnect.timer = setTimeout(() => { maybeAutoDisconnect().catch(() => {}); }, 700);
+}
+
+async function connect(nodeId, opts = {}) {
+  const state = await loadState();
+  if (opts.auto && (state.session.connected || state.session.connecting)) return state.session;
   const node = state.nodes.find((n) => n.id === nodeId) || state.nodes.find((n) => n.id === state.selectedId);
   if (!node) throw new Error("Выберите сервер");
 
   await saveState({
     selectedId: node.id,
-    session: { ...state.session, connecting: true, error: "", nodeId: node.id },
+    session: { ...state.session, connecting: true, error: "", nodeId: node.id, autoConnected: !!opts.auto },
   });
 
   const port = state.settings.attachMode ? Number(state.settings.attachPort) : Number(state.settings.socksPort);
@@ -139,6 +228,7 @@ async function connect(nodeId) {
       error: "",
       native: !state.settings.attachMode,
       core: (await loadState()).session.core,
+      autoConnected: !!opts.auto,
     };
     await saveState({ session });
     await setBadge(true);
@@ -152,7 +242,8 @@ async function connect(nodeId) {
   }
 }
 
-async function disconnect() {
+async function disconnect(opts = {}) {
+  if (!opts.auto) autoHoldUntil = Date.now() + 20000;
   const state = await loadState();
   await clearBrowserProxy();
   if (!state.settings.attachMode) {
@@ -639,7 +730,14 @@ ext.runtime.onStartup.addListener(async () => {
   if (state.session.connected && state.session.nodeId) {
     try { await connect(state.session.nodeId); }
     catch { await saveState({ session: { ...DEFAULT_STATE.session, error: "Не удалось восстановить соединение" } }); }
+    return;
   }
+  try {
+    const tabs = await ext.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.url) await maybeAutoConnect(tab.url);
+    }
+  } catch { /* tabs permission */ }
 });
 
 try {
@@ -709,6 +807,10 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return { ok: true, session: await connect(msg.id) };
       case "disconnect":
         return { ok: true, session: await disconnect() };
+      case "addAutoSite":
+        return { ok: true, ...(await addAutoSite(msg.site)) };
+      case "removeAutoSite":
+        return { ok: true, ...(await removeAutoSite(msg.site)) };
       case "importText":
         return { ok: true, ...(await importText(msg.text, msg.groupId, msg.groupName)) };
       case "importSubscription":
@@ -756,3 +858,20 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   })().then(sendResponse).catch((err) => sendResponse({ ok: false, error: err.message || String(err) }));
   return true;
 });
+
+if (ext.webNavigation?.onBeforeNavigate) {
+  ext.webNavigation.onBeforeNavigate.addListener((details) => {
+    if (details.frameId !== 0) return;
+    maybeAutoConnect(details.url).catch(() => {});
+  });
+}
+if (ext.tabs?.onUpdated) {
+  ext.tabs.onUpdated.addListener((_id, info, tab) => {
+    const url = info.url || tab?.url;
+    if (url) maybeAutoConnect(url).catch(() => {});
+    if (info.url || info.status === "complete") scheduleAutoDisconnect();
+  });
+}
+if (ext.tabs?.onRemoved) {
+  ext.tabs.onRemoved.addListener(() => scheduleAutoDisconnect());
+}
