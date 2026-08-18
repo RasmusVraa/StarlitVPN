@@ -329,6 +329,18 @@ async function probeNative() {
 }
 
 const SETUP_FILE = "StarlitVPN-setup.exe";
+const SETUP_PAGE = "setup/setup.html";
+
+async function hostExeUrl() {
+  const url = ext.runtime.getURL("native/host.exe");
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("missing");
+  } catch {
+    throw new Error("В папке расширения нет native/host.exe. Скачайте StarlitVPN.zip заново.");
+  }
+  return url;
+}
 
 function waitDownload(id) {
   return new Promise((resolve, reject) => {
@@ -339,7 +351,7 @@ function waitDownload(id) {
     const timer = setTimeout(() => {
       ext.downloads.onChanged.removeListener(onChange);
       resolve();
-    }, 20000);
+    }, 60000);
     function onChange(delta) {
       if (delta.id !== id) return;
       if (delta.state?.current === "complete") {
@@ -350,7 +362,7 @@ function waitDownload(id) {
       if (delta.state?.current === "interrupted") {
         clearTimeout(timer);
         ext.downloads.onChanged.removeListener(onChange);
-        reject(new Error("Не удалось сохранить установщик"));
+        reject(new Error("Chrome заблокировал установщик. В загрузках нажмите «Оставить», затем запустите StarlitVPN-setup.exe"));
       }
     }
     ext.downloads.onChanged.addListener(onChange);
@@ -359,37 +371,66 @@ function waitDownload(id) {
 
 async function prepareSetupDownload() {
   if (!ext.downloads?.download) throw new Error("Браузер не умеет скачивать установщик");
+  const url = await hostExeUrl();
   const id = await ext.downloads.download({
-    url: ext.runtime.getURL("native/host.exe"),
+    url,
     filename: SETUP_FILE,
-    conflictAction: "overwrite",
+    conflictAction: "uniquify",
     saveAs: false,
   });
   await ext.storage.local.set({ setupDownloadId: id });
   try {
     const found = await ext.downloads.search({ id });
-    if (found?.[0]?.state === "complete") return id;
+    if (found?.[0]?.state === "complete") return { id, danger: found[0].danger, filename: found[0].filename };
   } catch { /* ignore */ }
   await waitDownload(id);
-  return id;
+  const items = await ext.downloads.search({ id });
+  const item = items?.[0] || {};
+  return { id, danger: item.danger, filename: item.filename };
+}
+
+async function waitNative(ms = 120000) {
+  const started = Date.now();
+  while (Date.now() - started < ms) {
+    const probe = await nativeSend({ cmd: "status" });
+    if (probe?.ok && !probe.missing) return probe;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return null;
 }
 
 async function setupNative() {
   const already = await nativeSend({ cmd: "status" });
-  if (already?.ok && !already.missing) return already;
-  const id = await prepareSetupDownload();
-  if (ext.downloads?.open) {
+  if (already?.ok && !already.missing) {
+    nativeSend({ cmd: "ensure_core" }).catch(() => {});
+    return already;
+  }
+  let id = null;
+  try {
+    const prep = await prepareSetupDownload();
+    id = prep.id;
+  } catch (err) {
+    return { ok: false, error: err.message, missing: true };
+  }
+  if (ext.downloads?.open && id != null) {
     try { await ext.downloads.open(id); }
     catch {
       try { await ext.downloads.show(id); } catch { /* ignore */ }
     }
+  } else if (ext.downloads?.show && id != null) {
+    try { await ext.downloads.show(id); } catch { /* ignore */ }
   }
-  for (let i = 0; i < 40; i += 1) {
-    await new Promise((r) => setTimeout(r, 500));
-    const probe = await nativeSend({ cmd: "status" });
-    if (probe?.ok && !probe.missing) return { ok: true, ...probe };
+  const probe = await waitNative(120000);
+  if (probe) {
+    nativeSend({ cmd: "ensure_core" }).catch(() => {});
+    return { ok: true, ...probe };
   }
-  return { ok: false, error: "Запустите StarlitVPN-setup.exe из загрузок, если Windows его скачал.", missing: true };
+  return {
+    ok: false,
+    missing: true,
+    id,
+    error: "Запустите StarlitVPN-setup.exe из загрузок. Если Windows спросит — «Подробнее» → «Выполнить в любом случае». Затем на chrome://extensions нажмите «Обновить».",
+  };
 }
 
 function versionParts(v) {
@@ -421,6 +462,7 @@ async function checkUpdate(force) {
   });
   if (!res.ok) {
     await ext.storage.local.set({ updateCheckedAt: now });
+    if (force) throw new Error("Не удалось проверить обновления");
     return stored.appUpdate || null;
   }
   const data = await res.json();
@@ -434,7 +476,7 @@ async function checkUpdate(force) {
     url: asset?.browser_download_url || data.html_url,
     page: data.html_url,
   } : null;
-  await ext.storage.local.set({ updateCheckedAt: now, appUpdate: info });
+  await ext.storage.local.set({ updateCheckedAt: now, appUpdate: info, remoteVersion: version });
   return info;
 }
 
@@ -452,9 +494,6 @@ async function installUpdate() {
 }
 
 ext.runtime.onInstalled.addListener(() => {
-  probeNative().then((p) => {
-    if (p?.missing) prepareSetupDownload().catch(() => {});
-  }).catch(() => {});
   checkUpdate(true).catch(() => {});
 });
 
@@ -497,6 +536,12 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         checkUpdate(false).catch(() => {});
         return { ...state, nativeProbe: await probeNative(), appUpdate: appUpdate || null };
       }
+      case "checkUpdate": {
+        const local = ext.runtime.getManifest().version;
+        const update = await checkUpdate(true);
+        const stored = await ext.storage.local.get("remoteVersion");
+        return { ok: true, local, remote: stored.remoteVersion || update?.version || null, update };
+      }
       case "installUpdate":
         return installUpdate();
       case "select":
@@ -536,7 +581,14 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case "setupNative":
         return setupNative();
       case "prepareSetup":
-        return { ok: true, id: await prepareSetupDownload() };
+        return { ok: true, ...(await prepareSetupDownload()) };
+      case "waitNative":
+        return { ok: true, native: await waitNative(Number(msg.ms) || 120000) };
+      case "openSetupPage": {
+        const url = ext.runtime.getURL(SETUP_PAGE);
+        if (ext.tabs?.create) await ext.tabs.create({ url });
+        return { ok: true, url };
+      }
       case "openOptions":
         if (ext.runtime.openOptionsPage) await ext.runtime.openOptionsPage();
         return { ok: true };

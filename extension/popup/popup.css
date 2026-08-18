@@ -323,6 +323,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 }
 .primary:hover { filter: brightness(1.06); }
 .ghost { background: transparent; }
+.ghost.wide { width: 100%; margin-top: 8px; }
 .sheet-error { color: var(--danger); font-size: 12px; margin: 8px 0 0; }
 .hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
 .check { display: flex; gap: 8px; align-items: center; color: var(--text) !important; }

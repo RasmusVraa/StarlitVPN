@@ -61,6 +61,9 @@ function applyI18n(lang) {
   setText("setup-text", StarlitI18n.t(loc, setupBusy ? "setupWait" : "setupText"));
   setText("btn-setup", StarlitI18n.t(loc, "setupTitle"));
   setText("setup-hint", StarlitI18n.t(loc, "setupHint"));
+  setText("btn-check-update", StarlitI18n.t(loc, "updateCheck"));
+  const ver = ext.runtime.getManifest?.().version;
+  if (ver) setText("app-version", StarlitI18n.t(loc, "appVersion").replace("{v}", ver));
   return loc;
 }
 
@@ -280,23 +283,11 @@ function renderSetup() {
   el.hidden = !needsSetup();
 }
 
-let setupId = null;
 let setupBusy = false;
-async function prefetchSetup() {
-  try {
-    const stored = await ext.storage.local.get("setupDownloadId");
-    if (stored.setupDownloadId) {
-      setupId = stored.setupDownloadId;
-      return;
-    }
-    const res = await send("prepareSetup");
-    setupId = res?.id ?? null;
-  } catch { /* ignore */ }
-}
 
 async function pollSetup() {
-  for (let i = 0; i < 40; i += 1) {
-    await new Promise((r) => setTimeout(r, 500));
+  for (let i = 0; i < 120; i += 1) {
+    await new Promise((r) => setTimeout(r, 1000));
     await refresh();
     if (!needsSetup()) return;
   }
@@ -392,6 +383,24 @@ on("btn-core", "click", async () => {
   const res = await send("ensureCore");
   setText("core-status", res?.error || res?.core?.version || StarlitI18n.t(loc, "nativeOk"));
 });
+on("btn-check-update", "click", async () => {
+  const btn = $("btn-check-update");
+  if (btn) btn.disabled = true;
+  setText("update-status", StarlitI18n.t(loc, "updateChecking"));
+  try {
+    const res = await send("checkUpdate");
+    if (res?.error) throw new Error(res.error);
+    await refresh();
+    if (res?.update?.version) {
+      setText("update-status", StarlitI18n.t(loc, "updateAvailable").replace("{v}", res.update.version));
+    } else {
+      setText("update-status", StarlitI18n.t(loc, "updateLatest").replace("{v}", res?.local || ext.runtime.getManifest().version));
+    }
+  } catch (err) {
+    setText("update-status", err.message || StarlitI18n.t(loc, "updateCheckFail"));
+  }
+  if (btn) btn.disabled = false;
+});
 function latClass(ms) {
   if (ms == null) return "na";
   if (ms < 80) return "";
@@ -460,17 +469,24 @@ on("btn-update", "click", async (e) => {
   }
 });
 
-on("btn-setup", "click", () => {
+on("btn-setup", "click", async () => {
   setupBusy = true;
   setText("setup-text", StarlitI18n.t(loc, "setupWait"));
-  if (setupId != null && ext.downloads?.open) {
-    try { ext.downloads.open(setupId); } catch { /* ignore */ }
-  } else {
+  const btn = $("btn-setup");
+  if (btn) btn.disabled = true;
+  try {
+    const url = ext.runtime.getURL("setup/setup.html");
+    if (ext.tabs?.create) await ext.tabs.create({ url });
+    else window.open(url, "_blank", "noopener");
+  } catch {
     send("setupNative").catch(() => {});
   }
-  pollSetup().finally(() => { setupBusy = false; });
+  pollSetup().finally(() => {
+    setupBusy = false;
+    if (btn) btn.disabled = false;
+  });
 });
 
 wireCabinetLinks();
-refresh().then(() => { if (needsSetup()) prefetchSetup(); });
+refresh();
 setInterval(() => { if (state?.session?.connected) renderStatus(); }, 1000);

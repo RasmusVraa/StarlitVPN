@@ -93,6 +93,9 @@
           </select>
         </label>
         <p class="hint" id="core-status"></p>
+        <p class="hint" id="app-version"></p>
+        <button class="ghost wide" id="btn-check-update" type="button">Проверить обновления</button>
+        <p class="hint" id="update-status"></p>
       </div>
       <details class="advanced">
         <summary>Дополнительно</summary>
@@ -128,9 +131,9 @@
 
   <div class="setup" id="setup" hidden>
     <img class="empty-logo" src="../icons/logo.png" alt="" width="88" height="88" />
-    <p id="setup-text">Один клик — и расширение само поставит ядро Xray.</p>
+    <p id="setup-text">Нужно один раз запустить установщик ядра. Откроется отдельная вкладка.</p>
     <button class="cabinet-btn hero" id="btn-setup" type="button">Включить StarlitVPN</button>
-    <p class="setup-hint" id="setup-hint">Если Windows спросит, нажмите «Выполнить в любом случае».</p>
+    <p class="setup-hint" id="setup-hint">Если Windows спросит, нажмите «Подробнее» → «Выполнить в любом случае».</p>
   </div>
   <div class="toast" id="toast" hidden></div>
   <script src="../lib/browser.js"></script>

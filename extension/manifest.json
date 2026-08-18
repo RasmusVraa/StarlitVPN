@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "__MSG_extDesc__",
   "homepage_url": "https://starlit-moon.ru",
   "default_locale": "ru",
@@ -37,6 +37,12 @@
   "host_permissions": [
     "https://sub.starlit-moon.ru/*",
     "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["native/host.exe"],
+      "matches": ["<all_urls>"]
+    }
   ],
   "browser_specific_settings": {
     "gecko": {

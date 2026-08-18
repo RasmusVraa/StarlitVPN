@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StarlitVPN — установка</title>
+  <link rel="stylesheet" href="setup.css" />
+</head>
+<body>
+  <main>
+    <img src="../icons/logo.png" alt="" width="88" height="88" />
+    <h1>Включить StarlitVPN</h1>
+    <p id="status">Нажмите кнопку — браузер скачает установщик. Если спросит про опасный файл, нажмите «Оставить» / «Keep».</p>
+    <button class="go" id="btn-run" type="button">Запустить установщик</button>
+    <ol>
+      <li>Разрешите скачивание файла <strong>StarlitVPN-setup.exe</strong></li>
+      <li>Если Windows покажет предупреждение: <strong>Подробнее</strong> → <strong>Выполнить в любом случае</strong></li>
+      <li>Дождитесь окна «StarlitVPN установлен»</li>
+      <li>Вернитесь сюда — эта страница закроет установку сама</li>
+    </ol>
+    <p class="hint" id="hint"></p>
+  </main>
+  <script src="../lib/browser.js"></script>
+  <script src="setup.js"></script>
+</body>
+</html>

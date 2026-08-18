@@ -44,8 +44,13 @@ internal static class Program
             {
                 Log("register");
                 var result = Register();
-                Log("register done ok=" + result["ok"]);
-                return (result.ContainsKey("ok") && (bool)result["ok"]) ? 0 : 1;
+                var ok = result.ContainsKey("ok") && (bool)result["ok"];
+                Log("register done ok=" + ok);
+                var msg = ok
+                    ? "StarlitVPN установлен.\n\nВернитесь в браузер и снова откройте расширение."
+                    : ("Не удалось установить: " + Str(result, "error"));
+                Notify(msg);
+                return ok ? 0 : 1;
             }
             Log("native loop");
             NativeLoop();
@@ -150,11 +155,16 @@ internal static class Program
             }
         }
         WriteManifests(dest);
-        var core = EnsureCore();
         var st = Status();
         st["registered"] = true;
-        if (core.ContainsKey("ok") && !(bool)core["ok"]) return core;
+        st["path"] = dest;
         return st;
+    }
+
+    static void Notify(string text)
+    {
+        try { MessageBox(IntPtr.Zero, text, "StarlitVPN", 0x00000040u | 0x00040000u); }
+        catch { }
     }
 
     static void WriteManifests(string hostPath)
@@ -170,7 +180,8 @@ internal static class Program
             Path.Combine(local, @"Google\Chrome\User Data\NativeMessagingHosts"),
             Path.Combine(local, @"Microsoft\Edge\User Data\NativeMessagingHosts"),
             Path.Combine(local, @"BraveSoftware\Brave-Browser\User Data\NativeMessagingHosts"),
-            Path.Combine(local, @"Chromium\User Data\NativeMessagingHosts")
+            Path.Combine(local, @"Chromium\User Data\NativeMessagingHosts"),
+            Path.Combine(local, @"Yandex\YandexBrowser\User Data\NativeMessagingHosts")
         };
         foreach (var dir in chromeDirs)
         {
@@ -187,7 +198,8 @@ internal static class Program
             @"Software\Google\Chrome\NativeMessagingHosts\" + HostName,
             @"Software\Microsoft\Edge\NativeMessagingHosts\" + HostName,
             @"Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\" + HostName,
-            @"Software\Chromium\NativeMessagingHosts\" + HostName
+            @"Software\Chromium\NativeMessagingHosts\" + HostName,
+            @"Software\Yandex\YandexBrowser\NativeMessagingHosts\" + HostName
         })
         {
             using (var k = Registry.CurrentUser.CreateSubKey(key))
@@ -500,4 +512,7 @@ internal static class Program
 
     [DllImport("kernel32.dll")]
     static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
 }
