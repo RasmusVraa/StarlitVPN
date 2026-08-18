@@ -483,18 +483,30 @@ async function checkUpdate(force) {
 async function installUpdate() {
   const { appUpdate } = await ext.storage.local.get("appUpdate");
   if (!appUpdate?.url) throw new Error("Нет ссылки на обновление");
-  if (!ext.downloads?.download) throw new Error("Скачивание недоступно");
-  const id = await ext.downloads.download({
-    url: appUpdate.url,
-    filename: StarlitConfig.updateAsset || "StarlitVPN.zip",
-    conflictAction: "uniquify",
-    saveAs: false,
-  });
-  return { ok: true, id, url: appUpdate.url };
+  const reply = await nativeSend({ cmd: "self_update", url: appUpdate.url });
+  if (reply.missing) throw new Error("Сначала включите StarlitVPN — после этого обновления ставятся сами");
+  if (!reply.ok) throw new Error(reply.error || "Не удалось установить обновление");
+  await ext.storage.local.set({ appUpdate: null, updateCheckedAt: 0, remoteVersion: ext.runtime.getManifest().version });
+  return { ok: true, applied: true, count: reply.count || 0 };
+}
+
+let updateJob = null;
+function applyUpdateQuietly(info) {
+  if (!info?.url || updateJob) return;
+  updateJob = (async () => {
+    try {
+      const res = await installUpdate();
+      if (res?.applied) {
+        try { ext.runtime.reload(); } catch { /* popup closes */ }
+      }
+    } catch {
+      updateJob = null;
+    }
+  })();
 }
 
 ext.runtime.onInstalled.addListener(() => {
-  checkUpdate(true).catch(() => {});
+  checkUpdate(true).then((info) => applyUpdateQuietly(info)).catch(() => {});
 });
 
 ext.runtime.onStartup.addListener(async () => {
@@ -512,7 +524,8 @@ try {
 if (ext.alarms?.onAlarm) {
   ext.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === "starlit-update") {
-      await checkUpdate(true).catch(() => {});
+      const info = await checkUpdate(true).catch(() => null);
+      applyUpdateQuietly(info);
       return;
     }
     if (alarm.name !== "starlit-watch") return;
@@ -539,16 +552,23 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           const stored = await ext.storage.local.get("appUpdate");
           appUpdate = stored.appUpdate || null;
         }
-        return { ...state, nativeProbe: await probeNative(), appUpdate: appUpdate || null };
+        if (appUpdate?.url) applyUpdateQuietly(appUpdate);
+        return { ...state, nativeProbe: await probeNative(), appUpdate: appUpdate || null, updating: !!updateJob };
       }
       case "checkUpdate": {
         const local = ext.runtime.getManifest().version;
         const update = await checkUpdate(true);
         const stored = await ext.storage.local.get("remoteVersion");
-        return { ok: true, local, remote: stored.remoteVersion || update?.version || null, update };
+        if (update?.url) applyUpdateQuietly(update);
+        return { ok: true, local, remote: stored.remoteVersion || update?.version || null, update, installing: !!update };
       }
-      case "installUpdate":
-        return installUpdate();
+      case "installUpdate": {
+        const res = await installUpdate();
+        if (res?.applied) {
+          setTimeout(() => { try { ext.runtime.reload(); } catch { /* ignore */ } }, 400);
+        }
+        return res;
+      }
       case "select":
         await saveState({ selectedId: msg.id });
         return { ok: true };

@@ -141,13 +141,22 @@ function renderUpdate() {
   const bar = $("update-bar");
   if (!bar) return;
   const info = state?.appUpdate;
-  if (!info?.version) {
+  const updating = !!state?.updating;
+  if (!info?.version && !updating) {
     bar.hidden = true;
     return;
   }
   bar.hidden = false;
+  if (updating) {
+    setText("update-text", StarlitI18n.t(loc, "updateInstalling").replace("{v}", info?.version || ""));
+    const btn = $("btn-update");
+    if (btn) btn.hidden = true;
+    return;
+  }
   setText("update-text", StarlitI18n.t(loc, "updateAvailable").replace("{v}", info.version));
   setText("btn-update", StarlitI18n.t(loc, "updateNow"));
+  const btn = $("btn-update");
+  if (btn) btn.hidden = false;
 }
 
 function showToast(message) {
@@ -392,11 +401,13 @@ on("btn-check-update", "click", async () => {
     const res = await send("checkUpdate");
     if (res?.error) throw new Error(res.error);
     await refresh();
-    const msg = res?.update?.version
-      ? StarlitI18n.t(loc, "updateAvailable").replace("{v}", res.update.version)
-      : StarlitI18n.t(loc, "updateLatest").replace("{v}", res?.local || ext.runtime.getManifest().version);
-    setText("update-status", msg);
-    showToast(msg);
+    if (res?.update?.version || res?.installing) {
+      setText("update-status", StarlitI18n.t(loc, "updateInstalling").replace("{v}", res.update?.version || ""));
+      showToast(StarlitI18n.t(loc, "updateInstalling").replace("{v}", res.update?.version || ""));
+    } else {
+      setText("update-status", StarlitI18n.t(loc, "updateLatest").replace("{v}", res?.local || ext.runtime.getManifest().version));
+      showToast(StarlitI18n.t(loc, "updateLatest").replace("{v}", res?.local || ext.runtime.getManifest().version));
+    }
   } catch (err) {
     const msg = err.message || StarlitI18n.t(loc, "updateCheckFail");
     setText("update-status", msg);
@@ -466,7 +477,7 @@ on("btn-update", "click", async (e) => {
   try {
     const res = await send("installUpdate");
     if (res?.error) throw new Error(res.error);
-    showToast(StarlitI18n.t(loc, "updateDownloaded"));
+    showToast(StarlitI18n.t(loc, "updateInstalling").replace("{v}", state.appUpdate?.version || ""));
   } catch (err) {
     if (ext?.tabs?.create) ext.tabs.create({ url: state.appUpdate.page || url });
     else window.open(state.appUpdate.page || url, "_blank", "noopener");

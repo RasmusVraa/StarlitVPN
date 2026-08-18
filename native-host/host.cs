@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -8,6 +9,7 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 using Microsoft.Win32;
 
@@ -131,6 +133,7 @@ internal static class Program
             if (cmd == "ping") return TcpPing(Str(msg, "host"), IntVal(msg, "port"));
             if (cmd == "fetch") return FetchUrl(Str(msg, "url"), Str(msg, "userAgent"));
             if (cmd == "register") return Register();
+            if (cmd == "self_update") return SelfUpdate(Str(msg, "url"));
             return Fail("unknown cmd: " + cmd);
         }
         catch (Exception ex)
@@ -155,6 +158,7 @@ internal static class Program
             }
         }
         WriteManifests(dest);
+        RememberExtFromSelf();
         var st = Status();
         st["registered"] = true;
         st["path"] = dest;
@@ -468,6 +472,289 @@ internal static class Program
     static Dictionary<string, object> Fail(string error)
     {
         return new Dictionary<string, object> { { "ok", false }, { "error", error ?? "error" } };
+    }
+
+    static string PathsFile()
+    {
+        return Path.Combine(AppDir, "extension.paths");
+    }
+
+    static void RememberExtFromSelf()
+    {
+        try
+        {
+            var src = Assembly.GetExecutingAssembly().Location;
+            if (string.IsNullOrEmpty(src)) return;
+            var nativeDir = Path.GetDirectoryName(src);
+            if (string.IsNullOrEmpty(nativeDir) || !string.Equals(Path.GetFileName(nativeDir), "native", StringComparison.OrdinalIgnoreCase)) return;
+            var extDir = Path.GetDirectoryName(nativeDir);
+            if (!string.IsNullOrEmpty(extDir) && File.Exists(Path.Combine(extDir, "manifest.json")))
+                SaveExtPath(extDir);
+        }
+        catch { }
+    }
+
+    static void SaveExtPath(string dir)
+    {
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+        var full = Path.GetFullPath(dir);
+        var list = LoadSavedPaths();
+        foreach (var p in list)
+            if (PathsEqual(p, full)) return;
+        list.Add(full);
+        File.WriteAllLines(PathsFile(), list.ToArray(), new UTF8Encoding(false));
+    }
+
+    static List<string> LoadSavedPaths()
+    {
+        var list = new List<string>();
+        var file = PathsFile();
+        if (!File.Exists(file)) return list;
+        foreach (var line in File.ReadAllLines(file))
+        {
+            var p = (line ?? "").Trim();
+            if (p.Length > 0) list.Add(p);
+        }
+        return list;
+    }
+
+    static bool AllowedUpdateUrl(string url)
+    {
+        Uri u;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out u)) return false;
+        if (u.Scheme != Uri.UriSchemeHttps) return false;
+        var host = (u.Host ?? "").ToLowerInvariant();
+        if (host == "github.com" || host.EndsWith(".github.com"))
+            return u.AbsolutePath.IndexOf("/RasmusVraa/StarlitVPN/", StringComparison.OrdinalIgnoreCase) >= 0;
+        return host == "objects.githubusercontent.com"
+            || host == "release-assets.githubusercontent.com"
+            || host.EndsWith(".githubusercontent.com");
+    }
+
+    static Dictionary<string, object> SelfUpdate(string url)
+    {
+        if (!AllowedUpdateUrl(url)) return Fail("Некорректная ссылка обновления");
+        Directory.CreateDirectory(AppDir);
+        var tmp = Path.Combine(AppDir, "update");
+        try { if (Directory.Exists(tmp)) Directory.Delete(tmp, true); } catch { }
+        Directory.CreateDirectory(tmp);
+        var zipPath = Path.Combine(tmp, "StarlitVPN.zip");
+        try
+        {
+            using (var wc = new WebClient())
+            {
+                wc.Headers[HttpRequestHeader.UserAgent] = "StarlitVPN/1.0";
+                wc.DownloadFile(url, zipPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            return Fail("Не удалось скачать обновление: " + ex.Message);
+        }
+        var extract = Path.Combine(tmp, "unpack");
+        Directory.CreateDirectory(extract);
+        try { ZipFile.ExtractToDirectory(zipPath, extract); }
+        catch (Exception ex) { return Fail("Не удалось распаковать: " + ex.Message); }
+        var root = FindManifestRoot(extract);
+        if (root == null) return Fail("В архиве нет manifest.json");
+
+        var targets = CollectUpdateTargets();
+        var canonical = Path.Combine(AppDir, "app");
+        try
+        {
+            Directory.CreateDirectory(canonical);
+            CopyTree(root, canonical);
+        }
+        catch (Exception ex) { Log("mirror failed " + ex.Message); }
+
+        var updated = new ArrayList();
+        foreach (var target in targets)
+        {
+            try
+            {
+                Directory.CreateDirectory(target);
+                CopyTree(root, target);
+                SaveExtPath(target);
+                updated.Add(target);
+                Log("updated " + target);
+            }
+            catch (Exception ex)
+            {
+                Log("update copy failed " + target + " " + ex.Message);
+            }
+        }
+        if (updated.Count == 0)
+            return Fail("Не найден каталог загруженного расширения. Откройте chrome://extensions и загрузите папку ещё раз.");
+
+        var newHost = Path.Combine(root, "native", "host.exe");
+        if (File.Exists(newHost)) ReplaceRunningHost(newHost);
+
+        try { Directory.Delete(tmp, true); } catch { }
+        var st = Status();
+        st["ok"] = true;
+        st["applied"] = true;
+        st["count"] = updated.Count;
+        st["paths"] = updated;
+        return st;
+    }
+
+    static string FindManifestRoot(string dir)
+    {
+        if (File.Exists(Path.Combine(dir, "manifest.json"))) return dir;
+        if (!Directory.Exists(dir)) return null;
+        foreach (var sub in Directory.GetDirectories(dir))
+            if (File.Exists(Path.Combine(sub, "manifest.json"))) return sub;
+        return null;
+    }
+
+    static List<string> CollectUpdateTargets()
+    {
+        var list = new List<string>();
+        var canonical = Path.Combine(AppDir, "app");
+        if (File.Exists(Path.Combine(canonical, "manifest.json"))) AddUnique(list, canonical);
+        foreach (var p in LoadSavedPaths())
+            if (File.Exists(Path.Combine(p, "manifest.json"))) AddUnique(list, p);
+        foreach (var p in FindBrowserExtDirs()) AddUnique(list, p);
+        foreach (var p in GuessUserExtDirs())
+            if (File.Exists(Path.Combine(p, "manifest.json"))) AddUnique(list, p);
+        return list;
+    }
+
+    static List<string> GuessUserExtDirs()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return new List<string>
+        {
+            Path.Combine(home, "StarlitVPN"),
+            Path.Combine(home, "StarlitVPN", "extension"),
+            Path.Combine(home, "Downloads", "StarlitVPN"),
+            Path.Combine(home, "Downloads", "StarlitVPN", "extension"),
+            Path.Combine(home, "Desktop", "StarlitVPN"),
+            Path.Combine(home, "Desktop", "StarlitVPN", "extension"),
+            Path.Combine(home, "Documents", "StarlitVPN"),
+            Path.Combine(home, "Documents", "StarlitVPN", "extension")
+        };
+    }
+
+    static void AddUnique(List<string> list, string dir)
+    {
+        if (string.IsNullOrEmpty(dir)) return;
+        try
+        {
+            var full = Path.GetFullPath(dir);
+            foreach (var p in list)
+                if (PathsEqual(p, full)) return;
+            list.Add(full);
+        }
+        catch { }
+    }
+
+    static List<string> FindBrowserExtDirs()
+    {
+        var found = new List<string>();
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var roots = new[]
+        {
+            Path.Combine(local, @"Google\Chrome\User Data"),
+            Path.Combine(local, @"Microsoft\Edge\User Data"),
+            Path.Combine(local, @"BraveSoftware\Brave-Browser\User Data"),
+            Path.Combine(local, @"Chromium\User Data"),
+            Path.Combine(local, @"Yandex\YandexBrowser\User Data")
+        };
+        foreach (var root in roots)
+        {
+            if (!Directory.Exists(root)) continue;
+            try
+            {
+                foreach (var profile in Directory.GetDirectories(root))
+                {
+                    ScanPrefFile(Path.Combine(profile, "Preferences"), found);
+                    ScanPrefFile(Path.Combine(profile, "Secure Preferences"), found);
+                }
+            }
+            catch { }
+        }
+        var ff = Path.Combine(roaming, @"Mozilla\Firefox\Profiles");
+        if (Directory.Exists(ff))
+        {
+            try
+            {
+                foreach (var profile in Directory.GetDirectories(ff))
+                    ScanPrefFile(Path.Combine(profile, "extensions.json"), found);
+            }
+            catch { }
+        }
+        return found;
+    }
+
+    static void ScanPrefFile(string file, List<string> found)
+    {
+        if (!File.Exists(file)) return;
+        string text;
+        try { text = File.ReadAllText(file, Encoding.UTF8); }
+        catch { return; }
+        var id = ChromeId;
+        var idx = 0;
+        while (true)
+        {
+            idx = text.IndexOf(id, idx, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) break;
+            var start = Math.Max(0, idx - 800);
+            var len = Math.Min(5000, text.Length - start);
+            var slice = text.Substring(start, len);
+            foreach (Match m in Regex.Matches(slice, "\"path\"\\s*:\\s*\"((?:\\\\\\\\.|[^\"\\\\])*)\""))
+            {
+                var raw = m.Groups[1].Value.Replace("\\\\", "\\");
+                if (Directory.Exists(raw) && File.Exists(Path.Combine(raw, "manifest.json")))
+                    AddUnique(found, raw);
+            }
+            idx += id.Length;
+        }
+        if (text.IndexOf(FirefoxId, StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            foreach (Match m in Regex.Matches(text, "\"path\"\\s*:\\s*\"((?:\\\\\\\\.|[^\"\\\\])*)\""))
+            {
+                var raw = m.Groups[1].Value.Replace("\\\\", "\\");
+                if (Directory.Exists(raw) && File.Exists(Path.Combine(raw, "manifest.json")))
+                    AddUnique(found, raw);
+            }
+        }
+    }
+
+    static void CopyTree(string src, string dest)
+    {
+        foreach (var dir in Directory.GetDirectories(src, "*", SearchOption.AllDirectories))
+        {
+            var rel = dir.Substring(src.Length).TrimStart('\\', '/');
+            Directory.CreateDirectory(Path.Combine(dest, rel));
+        }
+        foreach (var file in Directory.GetFiles(src, "*", SearchOption.AllDirectories))
+        {
+            var rel = file.Substring(src.Length).TrimStart('\\', '/');
+            var to = Path.Combine(dest, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(to));
+            try { File.Copy(file, to, true); }
+            catch (Exception ex) { Log("skip " + to + " " + ex.Message); }
+        }
+    }
+
+    static void ReplaceRunningHost(string newHost)
+    {
+        var dest = Path.Combine(AppDir, "host.exe");
+        try
+        {
+            File.Copy(newHost, dest, true);
+            return;
+        }
+        catch { }
+        var pending = Path.Combine(AppDir, "host.exe.new");
+        try { File.Copy(newHost, pending, true); }
+        catch (Exception ex) { Log("host.exe.new " + ex.Message); return; }
+        var cmd = "cmd.exe";
+        var args = "/c ping 127.0.0.1 -n 3 >nul & move /y \"" + pending + "\" \"" + dest + "\"";
+        int pid;
+        StartDetached(cmd, "cmd.exe " + args, AppDir, out pid);
     }
 
     static string Str(Dictionary<string, object> msg, string key)
