@@ -141,7 +141,7 @@ internal static class Program
             var cmd = Str(msg, "cmd");
             if (cmd == "status") return Status();
             if (cmd == "ensure_core") return EnsureCore();
-            if (cmd == "start") return StartXray(Str(msg, "configText"), msg.ContainsKey("config") ? msg["config"] : null, IntVal(msg, "port"));
+            if (cmd == "start") return StartXray(Str(msg, "configText"), msg.ContainsKey("config") ? msg["config"] : null, IntVal(msg, "port"), Flag(msg, "force"));
             if (cmd == "stop") return StopXray();
             if (cmd == "ping") return TcpPing(Str(msg, "host"), IntVal(msg, "port"));
             if (cmd == "fetch") return FetchUrl(msg);
@@ -258,7 +258,16 @@ internal static class Program
         return OkCore();
     }
 
-    static Dictionary<string, object> StartXray(string configText, object configObj, int port)
+    static bool Flag(Dictionary<string, object> msg, string key)
+    {
+        if (msg == null || !msg.ContainsKey(key) || msg[key] == null) return false;
+        var v = msg[key];
+        if (v is bool) return (bool)v;
+        var s = Convert.ToString(v);
+        return string.Equals(s, "true", StringComparison.OrdinalIgnoreCase) || s == "1";
+    }
+
+    static Dictionary<string, object> StartXray(string configText, object configObj, int port, bool force)
     {
         var ready = EnsureCore();
         if (!(bool)ready["ok"]) return ready;
@@ -289,6 +298,19 @@ internal static class Program
         }
         File.WriteAllText(CfgPath, configText, new UTF8Encoding(false));
         PatchLogPath();
+        if (!force)
+        {
+            var live = CurrentPid();
+            if (live.HasValue)
+            {
+                var reused = OkCore();
+                reused["running"] = true;
+                reused["pid"] = live.Value;
+                reused["reused"] = true;
+                reused["port"] = port;
+                return reused;
+            }
+        }
         StopXray();
         var cmd = "\"" + XrayBin() + "\" run -c \"" + CfgPath + "\"";
         int pid;
