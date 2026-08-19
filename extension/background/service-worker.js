@@ -495,21 +495,27 @@ function looksLikeServerLabel(text) {
 }
 
 function cleanDescription(lines) {
-  return (lines || [])
-    .map((l) => String(l || "").trim())
-    .filter((l) => l && isDescriptionLine(l) && !looksLikeServerLabel(l));
+  const out = [];
+  for (const raw of (lines || [])) {
+    const line = String(raw || "").trim();
+    if (!line) continue;
+    if (line.startsWith("#")) continue;
+    if (/^happ:\/\/routing\//i.test(line)) continue;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(line)) continue;
+    if (looksLikeServerLabel(line)) continue;
+    if (!out.includes(line)) out.push(line);
+  }
+  return out;
 }
 
 function isDescriptionLine(text) {
   const t = String(text || "").trim();
-  if (!t || looksLikeServerLabel(t)) return false;
-  if (isAnnounceText(t)) return true;
-  if (/осталось\s*дней|дней\s*осталось/i.test(t)) return true;
-  if (/если\s+что.+(не\s+)?работает|нажмите\s*🔄/i.test(t)) return true;
-  if (/^⚡\s*быстрые\s+сервера/i.test(t)) return true;
-  if (/^❗\s*lte\s+для\s+обхода/i.test(t)) return true;
-  if (/обход\s+глушилок/i.test(t)) return true;
-  return false;
+  if (!t) return false;
+  if (t.startsWith("#")) return false;
+  if (/^happ:\/\/routing\//i.test(t)) return false;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return false;
+  if (looksLikeServerLabel(t)) return false;
+  return true;
 }
 
 function isInfoCarrierNode(n) {
@@ -530,8 +536,6 @@ function extractSubscriptionInfo(body, nodes) {
   }
   for (const line of String(body || "").split(/\r?\n/)) {
     const item = line.trim();
-    if (!item || item.startsWith("#") || /^happ:\/\/routing\//i.test(item)) continue;
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(item)) continue;
     if (!isDescriptionLine(item)) continue;
     if (!lines.includes(item)) lines.push(item);
   }
