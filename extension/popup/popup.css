@@ -404,35 +404,82 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .advanced summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 
 .auto-sites { margin-top: 14px; }
+.auto-sites-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.auto-sites-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  color: #d8d3ff;
+  background: rgba(139, 124, 255, 0.22);
+  border: 1px solid rgba(139, 124, 255, 0.35);
+}
 .site-add { display: flex; gap: 8px; margin-top: 8px; }
+.hola-add .primary {
+  padding: 8px 12px;
+  white-space: nowrap;
+}
 .site-add input { flex: 1; min-width: 0; }
 .site-add .ghost { flex: none; }
+.site-suggest {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.site-suggest-label {
+  color: var(--muted);
+  font-size: 11px;
+  margin-right: 2px;
+}
+.site-chip {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: #d9d9e7;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.site-chip:hover {
+  background: rgba(139, 124, 255, 0.16);
+  border-color: rgba(139, 124, 255, 0.34);
+}
 .site-list {
   list-style: none;
   margin: 8px 0 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .site-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
-  background: #101018;
+  background: rgba(139, 124, 255, 0.08);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 7px 8px 7px 10px;
+  border-radius: 999px;
+  padding: 5px 6px 5px 10px;
 }
 .site-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-empty { color: var(--muted); font-size: 12px; padding: 4px 0; }
 .site-del {
-  width: 26px; height: 26px; flex: none;
+  width: 20px; height: 20px; flex: none;
   border: 0; border-radius: 8px;
-  background: transparent;
+  background: rgba(255,255,255,0.08);
   color: var(--muted);
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1;
 }
 .site-del:hover { background: var(--lift); color: var(--danger); }

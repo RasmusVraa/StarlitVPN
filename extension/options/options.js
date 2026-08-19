@@ -9,11 +9,13 @@ let autoSites = [];
 function paintSites() {
   const list = $("auto-site-list");
   if (!list) return;
+  const count = $("auto-site-count");
+  if (count) count.textContent = String(autoSites.length);
   if (!autoSites.length) {
     list.innerHTML = "<li class=\"hint\">Сайтов пока нет</li>";
     return;
   }
-  list.innerHTML = autoSites.map((site) => `<li><span>${site}</span> <button type="button" class="ghost site-del" data-site="${site}">Удалить</button></li>`).join("");
+  list.innerHTML = autoSites.map((site) => `<li><span>${site}</span> <button type="button" class="ghost site-del" data-site="${site}">×</button></li>`).join("");
 }
 
 async function load() {
@@ -92,6 +94,15 @@ $("auto-site-list")?.addEventListener("click", async (e) => {
   const btn = e.target.closest(".site-del");
   if (!btn) return;
   const res = await send("removeAutoSite", { site: btn.dataset.site });
+  autoSites = res.autoSites || [];
+  paintSites();
+});
+
+document.querySelector(".site-suggest")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".chip");
+  if (!btn) return;
+  const res = await send("addAutoSite", { site: btn.dataset.site });
+  if (res?.error) return;
   autoSites = res.autoSites || [];
   paintSites();
 });
