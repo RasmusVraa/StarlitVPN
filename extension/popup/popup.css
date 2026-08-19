@@ -419,6 +419,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   color: #e9fff7;
   background: rgba(94, 234, 212, 0.2);
   border: 1px solid rgba(94, 234, 212, 0.45);
+  cursor: pointer;
+}
+.auto-sites-mode.off {
+  color: #ffe8ec;
+  background: rgba(255, 122, 147, 0.14);
+  border-color: rgba(255, 122, 147, 0.45);
 }
 .auto-sites-count {
   min-width: 22px;
@@ -474,7 +480,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 }
 .site-empty { color: var(--muted); font-size: 12px; padding: 4px 0; }
 .site-state {
-  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 44px;
   border: 1px solid rgba(94, 234, 212, 0.45);
   border-radius: 999px;
@@ -485,7 +493,27 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   letter-spacing: 0.04em;
   padding: 4px 8px;
 }
-.site-state:hover {
+.site-state.off {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d0d0dc;
+}
+.site-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.site-remove {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8b8c8;
+  font-weight: 700;
+  line-height: 1;
+}
+.site-remove:hover {
   border-color: rgba(255, 122, 147, 0.6);
   background: rgba(255, 122, 147, 0.16);
   color: #ffd5de;

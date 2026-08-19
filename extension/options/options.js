@@ -5,17 +5,31 @@ function send(type, payload = {}) {
 const fields = ["attachMode", "attachHost", "attachPort", "socksPort", "routing", "language"];
 
 let autoSites = [];
+let autoSitesEnabled = true;
 
 function paintSites() {
   const list = $("auto-site-list");
   if (!list) return;
+  const toggle = $("auto-sites-toggle");
+  if (toggle) {
+    toggle.textContent = autoSitesEnabled ? "AUTO ON" : "AUTO OFF";
+    toggle.classList.toggle("off", !autoSitesEnabled);
+  }
   const count = $("auto-site-count");
   if (count) count.textContent = String(autoSites.length);
   if (!autoSites.length) {
     list.innerHTML = "<li class=\"hint\">Сайтов пока нет</li>";
     return;
   }
-  list.innerHTML = autoSites.map((site) => `<li><span>${site}</span> <button type="button" class="ghost site-del" data-site="${site}">ON</button></li>`).join("");
+  list.innerHTML = autoSites.map((site) => `
+    <li>
+      <span>${site}</span>
+      <div class="site-actions">
+        <span class="site-state ${autoSitesEnabled ? "on" : "off"}">${autoSitesEnabled ? "ON" : "OFF"}</span>
+        <button type="button" class="ghost site-del" data-site="${site}" title="Удалить">✕</button>
+      </div>
+    </li>
+  `).join("");
 }
 
 async function load() {
@@ -28,6 +42,7 @@ async function load() {
   $("routing").value = s.routing || "bypass-private";
   $("language").value = s.language || "auto";
   autoSites = s.autoSites || [];
+  autoSitesEnabled = s.autoSitesEnabled !== false;
   paintSites();
   paintCore(state.nativeProbe);
 }
@@ -59,6 +74,7 @@ $("btn-save").addEventListener("click", async () => {
       httpPort: (Number($("socksPort").value) || 10808) + 1,
       routing: $("routing").value,
       language: $("language").value,
+      autoSitesEnabled,
     },
   });
   $("saved").hidden = false;
@@ -95,6 +111,12 @@ $("auto-site-list")?.addEventListener("click", async (e) => {
   if (!btn) return;
   const res = await send("removeAutoSite", { site: btn.dataset.site });
   autoSites = res.autoSites || [];
+  paintSites();
+});
+
+$("auto-sites-toggle")?.addEventListener("click", async () => {
+  autoSitesEnabled = !autoSitesEnabled;
+  await send("saveSettings", { settings: { autoSitesEnabled } });
   paintSites();
 });
 

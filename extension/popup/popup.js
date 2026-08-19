@@ -265,6 +265,12 @@ function renderAutoSites() {
   const list = $("auto-site-list");
   if (!list) return;
   const sites = state?.settings?.autoSites || [];
+  const enabled = state?.settings?.autoSitesEnabled !== false;
+  const toggle = $("auto-sites-toggle");
+  if (toggle) {
+    toggle.textContent = enabled ? "AUTO ON" : "AUTO OFF";
+    toggle.classList.toggle("off", !enabled);
+  }
   setText("auto-sites-count", String(sites.length));
   if (!sites.length) {
     list.innerHTML = `<li class="site-empty">${escapeHtml(StarlitI18n.t(loc, "autoSiteEmpty"))}</li>`;
@@ -273,7 +279,10 @@ function renderAutoSites() {
   list.innerHTML = sites.map((site) => `
     <li class="site-item">
       <span>${escapeHtml(site)}</span>
-      <button type="button" class="site-state" data-site="${escapeHtml(site)}" title="${escapeHtml(StarlitI18n.t(loc, "delete"))}">ON</button>
+      <div class="site-actions">
+        <span class="site-state ${enabled ? "on" : "off"}">${enabled ? "ON" : "OFF"}</span>
+        <button type="button" class="site-remove" data-site="${escapeHtml(site)}" title="${escapeHtml(StarlitI18n.t(loc, "delete"))}">✕</button>
+      </div>
     </li>
   `).join("");
 }
@@ -307,7 +316,7 @@ on("auto-site", "keydown", (e) => {
   }
 });
 on("auto-site-list", "click", async (e) => {
-  const btn = e.target.closest(".site-state");
+  const btn = e.target.closest(".site-remove");
   if (!btn) return;
   const res = await send("removeAutoSite", { site: btn.dataset.site });
   if (res?.error) {
@@ -316,6 +325,14 @@ on("auto-site-list", "click", async (e) => {
   }
   if (state) state.settings = { ...(state.settings || {}), autoSites: res.autoSites || [] };
   renderAutoSites();
+});
+on("auto-sites-toggle", "click", async () => {
+  const current = state?.settings?.autoSitesEnabled !== false;
+  const next = !current;
+  await send("saveSettings", { settings: { autoSitesEnabled: next } });
+  if (state) state.settings = { ...(state.settings || {}), autoSitesEnabled: next };
+  renderAutoSites();
+  showToast(StarlitI18n.t(loc, "saved"));
 });
 
 function fillSettings() {
@@ -452,6 +469,7 @@ on("btn-save-settings", "click", async () => {
       httpPort: (Number($("socksPort")?.value) || 10808) + 1,
       routing: $("routing")?.value || "bypass-private",
       language: $("language")?.value || "auto",
+      autoSitesEnabled: state?.settings?.autoSitesEnabled !== false,
     },
   });
   await refresh();

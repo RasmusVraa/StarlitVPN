@@ -94,6 +94,14 @@ code { color: #c8c0ff; }
   font-size: 13px;
   margin-bottom: 8px;
 }
+.auto-sites-toggle {
+  min-width: 88px;
+}
+.auto-sites-toggle.off {
+  color: #ffd5de !important;
+  border-color: rgba(255, 122, 147, 0.6) !important;
+  background: rgba(255, 122, 147, 0.16) !important;
+}
 .auto-sites-count {
   min-width: 22px;
   padding: 1px 8px;
@@ -105,15 +113,39 @@ code { color: #c8c0ff; }
 }
 .auto-sites-add { margin-bottom: 8px; }
 .site-del {
-  min-width: 44px;
+  width: 24px;
   height: 24px;
   border-radius: 999px;
-  padding: 0 8px;
-  border: 1px solid rgba(94, 234, 212, 0.45) !important;
-  background: rgba(94, 234, 212, 0.16) !important;
-  color: #dcfff6 !important;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  background: rgba(255,255,255,0.04) !important;
+  color: #b8b8c8 !important;
   font-weight: 700;
   line-height: 1;
+}
+.site-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.site-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 234, 212, 0.45);
+  background: rgba(94, 234, 212, 0.16);
+  color: #dcfff6;
+  font-weight: 700;
+  font-size: 11px;
+}
+.site-state.off {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d0d0dc;
 }
 .site-del:hover {
   border-color: rgba(255, 122, 147, 0.6) !important;

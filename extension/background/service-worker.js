@@ -17,6 +17,7 @@ const DEFAULT_STATE = {
     attachPort: 10808,
     loglevel: "warning",
     autoSites: [],
+    autoSitesEnabled: true,
   },
   session: {
     connected: false,
@@ -41,6 +42,7 @@ async function loadState() {
   cachedAttachHost = settings.attachHost || "127.0.0.1";
   cachedAttachPort = Number(settings.attachPort || 10808);
   cachedAttachMode = !!settings.attachMode;
+  cachedAutoSitesEnabled = settings.autoSitesEnabled !== false;
   return {
     nodes: stored.nodes || [],
     groups: stored.groups || [],
@@ -146,6 +148,7 @@ let cachedSocksPort = 10808;
 let cachedAttachHost = "127.0.0.1";
 let cachedAttachPort = 10808;
 let cachedAttachMode = false;
+let cachedAutoSitesEnabled = true;
 let autoPacInstalled = false;
 let autoPacKey = "";
 let fullTunnel = false;
@@ -191,7 +194,7 @@ async function addAutoSite(input) {
   const autoSites = [...new Set([...(state.settings.autoSites || []), site])].slice(0, 80);
   await saveState({ settings: { ...state.settings, autoSites } });
   cachedAutoSites = autoSites;
-  installAutoPac().catch(() => {});
+  if (cachedAutoSitesEnabled) installAutoPac().catch(() => {});
   return { site, autoSites };
 }
 
@@ -218,7 +221,7 @@ function autoProxyTarget() {
 }
 
 async function installAutoPac() {
-  if (!cachedAutoSites.length || fullTunnel) return;
+  if (!cachedAutoSitesEnabled || !cachedAutoSites.length || fullTunnel) return;
   const { port, host } = autoProxyTarget();
   const key = `auto|${host}|${port}|${cachedAutoSites.join(",")}`;
   if (autoPacInstalled && autoPacKey === key) return;
@@ -279,6 +282,7 @@ async function ensureWarm() {
 
 async function maybeAutoConnect(url) {
   if (Date.now() < autoHoldUntil) return;
+  if (!cachedAutoSitesEnabled) return;
   if (fullTunnel) return;
   if (!urlMatchesSites(url, cachedAutoSites)) return;
   markAutoBadge(true);
@@ -286,6 +290,7 @@ async function maybeAutoConnect(url) {
 }
 
 async function maybeAutoDisconnect() {
+  if (!cachedAutoSitesEnabled) return;
   if (fullTunnel) return;
   if (!cachedAutoSites.length) return;
   if (await anyAutoSiteTab(cachedAutoSites)) return;
@@ -905,7 +910,7 @@ ext.runtime.onStartup.addListener(async () => {
     catch { await saveState({ session: { ...DEFAULT_STATE.session, error: "Не удалось восстановить соединение" } }); }
     return;
   }
-  if (state.settings.autoSites?.length) installAutoPac().catch(() => {});
+  if (state.settings.autoSitesEnabled !== false && state.settings.autoSites?.length) installAutoPac().catch(() => {});
   try {
     const tabs = await ext.tabs.query({});
     for (const tab of tabs) {
@@ -1018,7 +1023,16 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case "saveSettings":
         await saveState({ settings: { ...state.settings, ...msg.settings } });
         await loadState();
-        if (!fullTunnel && cachedAutoSites.length) installAutoPac().catch(() => {});
+        if (!fullTunnel) {
+          if (cachedAutoSitesEnabled && cachedAutoSites.length) {
+            installAutoPac().catch(() => {});
+          } else {
+            autoPacInstalled = false;
+            autoPacKey = "";
+            clearBrowserProxy().catch(() => {});
+            markAutoBadge(false);
+          }
+        }
         return { ok: true };
       case "pingNode":
         return { ok: true, ...(await pingNode(msg.id)) };
@@ -1072,7 +1086,8 @@ ext.storage.local.get(["settings", "session"], (stored) => {
   cachedAttachHost = settings.attachHost || "127.0.0.1";
   cachedAttachPort = Number(settings.attachPort || 10808);
   cachedAttachMode = !!settings.attachMode;
+  cachedAutoSitesEnabled = settings.autoSitesEnabled !== false;
   if (stored?.session?.connected && !stored.session.autoConnected) fullTunnel = true;
   autoBadgeOn = !!(stored?.session?.connected);
-  if (cachedAutoSites.length && !fullTunnel) installAutoPac().catch(() => {});
+  if (cachedAutoSitesEnabled && cachedAutoSites.length && !fullTunnel) installAutoPac().catch(() => {});
 });
