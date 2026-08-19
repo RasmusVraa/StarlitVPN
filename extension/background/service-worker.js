@@ -504,13 +504,25 @@ function looksLikeNoiseToken(text) {
   return false;
 }
 
+function looksLikeUpperServerCaption(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (!/[A-ZА-ЯЁ]/.test(t)) return false;
+  if (/[a-zа-яё]/.test(t)) return false;
+  if (/[!?.,:;]/.test(t)) return false;
+  if (/^(tg|web)\s*[-–—]/i.test(t)) return false;
+  if (/\s/.test(t) && t.length <= 32) return true;
+  if (/^[A-ZА-ЯЁ0-9|_-]{6,}$/.test(t)) return true;
+  return false;
+}
+
 function isHumanDescriptionLine(text) {
   const t = String(text || "").trim();
   if (!t) return false;
   if (t.startsWith("#")) return false;
   if (/^happ:\/\/routing\//i.test(t)) return false;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return false;
-  if (looksLikeServerLabel(t) || looksLikeNoiseToken(t)) return false;
+  if (looksLikeServerLabel(t) || looksLikeNoiseToken(t) || looksLikeUpperServerCaption(t)) return false;
   if (/[а-яё]/i.test(t)) return true;
   if (/[⚡❗🔄🚫ℹ️⌛⚠]/u.test(t)) return true;
   if (/support|error|days|traffic|limit/i.test(t)) return true;
