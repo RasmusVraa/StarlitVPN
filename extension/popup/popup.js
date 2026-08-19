@@ -247,6 +247,19 @@ function fmtSubMeta(group) {
   return parts.join(" | ");
 }
 
+function isHintLine(line) {
+  const t = String(line || "").trim();
+  if (!t) return false;
+  if (/^(vless|vmess|trojan|ss|shadowsocks|hysteria2?|hy2|lte)\b/i.test(t)) return false;
+  if (/\b(vless|vmess|trojan|hysteria2?|hy2|shadowsocks|ss)\b.*⚡/i.test(t)) return false;
+  if (/^(финляндия|германия|литва|турция)/i.test(t) && /⚡/.test(t)) return false;
+  if (/\b(abto|hysteria2?(fi|de|lt|tr)?)\b/i.test(t) && /⚡/.test(t)) return false;
+  if (/\|\s*(германия|литва|турция)\b/i.test(t)) return false;
+  if (/⚡\s*(gp|fi|de|lt|tr)\b/i.test(t) && !/быстрые\s+сервера/i.test(t)) return false;
+  if (/hysteria2?(fi|de|lt|tr)\b/i.test(t)) return false;
+  return true;
+}
+
 function renderGroups() {
   const box = $("groups");
   if (!box) return;
@@ -258,22 +271,16 @@ function renderGroups() {
     const pct = total ? trafficPct(g) : 0;
     const tier = trafficTier(pct);
     const meta = fmtSubMeta(g);
-    const desc = (g.description || []).filter(Boolean);
-    const routing = g.happRouting && !g.happRouting.off
-      ? (g.happRoutingName || g.happRouting.Name || "Happ routing")
-      : "";
-    return `<article class="sub${tier ? ` ${tier}` : ""}${pct ? " has-progress" : ""}"${pct ? ` style="--progress:${pct}%"` : ""}>
-      ${pct ? '<span class="sub-fill" aria-hidden="true"></span>' : ""}
+    const desc = (g.description || []).filter(isHintLine);
+    return `<article class="sub${tier ? ` ${tier}` : ""}">
       <div class="sub-body">
-        <div class="sub-row">
-          <div class="sub-title-wrap">
-            <p class="sub-name">${escapeHtml(g.name)}</p>
-            ${meta ? `<p class="sub-meta">${escapeHtml(meta)}</p>` : ""}
-          </div>
-          <p class="sub-usage">${escapeHtml(usage)}</p>
-        </div>
+        <p class="sub-name">${escapeHtml(g.name)}</p>
+        ${meta ? `<p class="sub-meta">${escapeHtml(meta)}</p>` : ""}
+        ${total ? `<div class="sub-traffic${tier ? ` ${tier}` : ""}" style="--progress:${pct}%">
+          <span class="sub-fill" aria-hidden="true"></span>
+          <span class="sub-usage">${escapeHtml(usage)}</span>
+        </div>` : ""}
         ${desc.length ? `<div class="sub-desc">${desc.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>` : ""}
-        ${routing ? `<p class="sub-routing">Routing: ${escapeHtml(routing)}</p>` : ""}
       </div>
     </article>`;
   }).join("");

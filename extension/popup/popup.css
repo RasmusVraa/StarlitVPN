@@ -401,8 +401,6 @@ select:focus-visible {
 
 /* ── Subscription chip ── */
 .sub {
-  position: relative;
-  overflow: hidden;
   display: block;
   padding: var(--s2) var(--s3);
   margin-bottom: var(--s2);
@@ -411,23 +409,41 @@ select:focus-visible {
   border: 1px solid var(--line);
 }
 .sub-body {
-  position: relative;
-  z-index: 1;
-}
-.sub-row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--s2);
-}
-.sub-title-wrap {
-  min-width: 0;
-  flex: 1;
+  flex-direction: column;
+  gap: 2px;
 }
 .sub-meta {
-  margin: 2px 0 0;
+  margin: 0;
   color: var(--text-tertiary);
   font-size: var(--font-xs);
+}
+.sub-traffic {
+  position: relative;
+  overflow: hidden;
+  margin-top: var(--s2);
+  height: 30px;
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sub-traffic .sub-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--progress, 0%);
+  background: linear-gradient(90deg, rgba(139, 124, 255, 0.38), rgba(94, 234, 212, 0.22));
+  pointer-events: none;
+  transition: width 0.45s var(--ease);
+}
+.sub-traffic.warn .sub-fill {
+  background: linear-gradient(90deg, rgba(255, 211, 122, 0.42), rgba(255, 155, 122, 0.24));
+}
+.sub-traffic.danger .sub-fill {
+  background: linear-gradient(90deg, rgba(255, 122, 147, 0.46), rgba(255, 122, 147, 0.26));
 }
 .sub-desc {
   margin-top: var(--s2);
@@ -444,42 +460,19 @@ select:focus-visible {
 .sub-desc p + p {
   margin-top: 4px;
 }
-.sub-routing {
-  margin: var(--s2) 0 0;
-  color: var(--accent);
-  font-size: var(--font-xs);
-  font-weight: var(--fw-medium);
-}
-.sub-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: var(--progress, 0%);
-  background: linear-gradient(90deg, rgba(139, 124, 255, 0.3), rgba(94, 234, 212, 0.15));
-  pointer-events: none;
-  transition: width 0.45s var(--ease);
-}
-.sub.warn .sub-fill {
-  background: linear-gradient(90deg, rgba(255, 211, 122, 0.34), rgba(255, 155, 122, 0.18));
-}
-.sub.danger .sub-fill {
-  background: linear-gradient(90deg, rgba(255, 122, 147, 0.38), rgba(255, 122, 147, 0.2));
-}
 .sub-name, .sub-usage {
-  position: relative;
-  z-index: 1;
   margin: 0;
 }
 .sub-name {
   font-weight: var(--fw-medium);
   font-size: var(--font-sm);
 }
-.sub-usage {
-  flex: none;
-  color: var(--text-secondary);
+.sub-traffic .sub-usage {
+  position: relative;
+  z-index: 1;
+  color: var(--text-primary);
   font-size: var(--font-xs);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-bold);
   white-space: nowrap;
 }
 .sub.updating { animation: sub-glow 1s ease-in-out infinite; }

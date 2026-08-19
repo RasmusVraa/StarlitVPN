@@ -480,9 +480,29 @@ function isAnnounceNode(n) {
   return isAnnounceText(n?.name) || isAnnounceText(n?.remark);
 }
 
+function looksLikeServerLabel(text) {
+  const t = String(text || "").trim();
+  if (!t) return true;
+  if (/^(vless|vmess|trojan|ss|shadowsocks|hysteria2?|hy2|socks5?|lte)\b/i.test(t)) return true;
+  if (/\b(vless|vmess|trojan|hysteria2?|hy2|shadowsocks|ss)\b.*⚡/i.test(t)) return true;
+  if (/^(финляндия|германия|литва|турция)\b.*(vless|hysteria|lte|hy2)/i.test(t)) return true;
+  if (/\b(abto|hysteria2?(fi|de|lt|tr)?)\b/i.test(t) && /⚡/.test(t)) return true;
+  if (/\|\s*(германия|литва|турция)\b/i.test(t)) return true;
+  if (/⚡\s*(gp|fi|de|lt|tr)\b/i.test(t) && !/быстрые\s+сервера/i.test(t)) return true;
+  if (/^(финляндия|германия|литва|турция)/i.test(t) && /⚡/.test(t)) return true;
+  if (/hysteria2?(fi|de|lt|tr)\b/i.test(t)) return true;
+  return false;
+}
+
+function cleanDescription(lines) {
+  return (lines || [])
+    .map((l) => String(l || "").trim())
+    .filter((l) => l && isDescriptionLine(l) && !looksLikeServerLabel(l));
+}
+
 function isDescriptionLine(text) {
   const t = String(text || "").trim();
-  if (!t) return false;
+  if (!t || looksLikeServerLabel(t)) return false;
   if (isAnnounceText(t)) return true;
   if (/осталось\s*дней|дней\s*осталось/i.test(t)) return true;
   if (/если\s+что.+(не\s+)?работает|нажмите\s*🔄/i.test(t)) return true;
@@ -515,7 +535,21 @@ function extractSubscriptionInfo(body, nodes) {
     if (!isDescriptionLine(item)) continue;
     if (!lines.includes(item)) lines.push(item);
   }
-  return lines;
+  return cleanDescription(lines);
+}
+
+async function sanitizeStoredGroups(groups) {
+  let changed = false;
+  const next = (groups || []).map((g) => {
+    const description = cleanDescription(g.description);
+    if (JSON.stringify(description) !== JSON.stringify(g.description || [])) {
+      changed = true;
+      return { ...g, description };
+    }
+    return g;
+  });
+  if (changed) await saveState({ groups: next });
+  return next;
 }
 
 function groupHappRouting(group) {
@@ -1060,6 +1094,7 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         }
         await dropAnnounceNodes();
         const fresh = await loadState();
+        fresh.groups = await sanitizeStoredGroups(fresh.groups || []);
         let appUpdate = null;
         try {
           appUpdate = await checkUpdate(true);
