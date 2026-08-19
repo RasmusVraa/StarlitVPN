@@ -485,12 +485,14 @@ function looksLikeServerLabel(text) {
   if (!t) return true;
   if (/^(vless|vmess|trojan|ss|shadowsocks|hysteria2?|hy2|socks5?|lte)\b/i.test(t)) return true;
   if (/\b(vless|vmess|trojan|hysteria2?|hy2|shadowsocks|ss)\b.*⚡/i.test(t)) return true;
+  if (/^(финляндия|германия|литва|турция)\s*\d+\s*[a-zа-я]{0,4}$/i.test(t)) return true;
   if (/^(финляндия|германия|литва|турция)\b.*(vless|hysteria|lte|hy2)/i.test(t)) return true;
   if (/\b(abto|hysteria2?(fi|de|lt|tr)?)\b/i.test(t) && /⚡/.test(t)) return true;
   if (/\|\s*(германия|литва|турция)\b/i.test(t)) return true;
   if (/⚡\s*(gp|fi|de|lt|tr)\b/i.test(t) && !/быстрые\s+сервера/i.test(t)) return true;
   if (/^(финляндия|германия|литва|турция)/i.test(t) && /⚡/.test(t)) return true;
   if (/hysteria2?(fi|de|lt|tr)\b/i.test(t)) return true;
+  if (/^[A-Za-z0-9_-]{24,}$/.test(t)) return true;
   return false;
 }
 
@@ -529,11 +531,6 @@ function isInfoCarrierNode(n) {
 
 function extractSubscriptionInfo(body, nodes) {
   const lines = [];
-  for (const n of nodes || []) {
-    const text = String(n.name || n.remark || "").trim();
-    if (!isDescriptionLine(text)) continue;
-    if (text && !lines.includes(text)) lines.push(text);
-  }
   for (const line of String(body || "").split(/\r?\n/)) {
     const item = line.trim();
     if (!isDescriptionLine(item)) continue;
