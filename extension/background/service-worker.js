@@ -496,28 +496,39 @@ function looksLikeServerLabel(text) {
   return false;
 }
 
+function looksLikeNoiseToken(text) {
+  const t = String(text || "").trim();
+  if (!t) return true;
+  if (/^[A-Za-z0-9+/_=-]{20,}$/.test(t)) return true;
+  if (!/\s/.test(t) && t.length > 18) return true;
+  return false;
+}
+
+function isHumanDescriptionLine(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (t.startsWith("#")) return false;
+  if (/^happ:\/\/routing\//i.test(t)) return false;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return false;
+  if (looksLikeServerLabel(t) || looksLikeNoiseToken(t)) return false;
+  if (/[а-яё]/i.test(t)) return true;
+  if (/[⚡❗🔄🚫ℹ️⌛⚠]/u.test(t)) return true;
+  if (/support|error|days|traffic|limit/i.test(t)) return true;
+  return false;
+}
+
 function cleanDescription(lines) {
   const out = [];
   for (const raw of (lines || [])) {
     const line = String(raw || "").trim();
-    if (!line) continue;
-    if (line.startsWith("#")) continue;
-    if (/^happ:\/\/routing\//i.test(line)) continue;
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(line)) continue;
-    if (looksLikeServerLabel(line)) continue;
+    if (!isHumanDescriptionLine(line)) continue;
     if (!out.includes(line)) out.push(line);
   }
   return out;
 }
 
 function isDescriptionLine(text) {
-  const t = String(text || "").trim();
-  if (!t) return false;
-  if (t.startsWith("#")) return false;
-  if (/^happ:\/\/routing\//i.test(t)) return false;
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return false;
-  if (looksLikeServerLabel(t)) return false;
-  return true;
+  return isHumanDescriptionLine(text);
 }
 
 function isInfoCarrierNode(n) {
@@ -531,6 +542,11 @@ function isInfoCarrierNode(n) {
 
 function extractSubscriptionInfo(body, nodes) {
   const lines = [];
+  for (const n of nodes || []) {
+    const text = String(n.name || n.remark || "").trim();
+    if (!isDescriptionLine(text)) continue;
+    if (text && !lines.includes(text)) lines.push(text);
+  }
   for (const line of String(body || "").split(/\r?\n/)) {
     const item = line.trim();
     if (!isDescriptionLine(item)) continue;
