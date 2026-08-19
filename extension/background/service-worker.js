@@ -480,26 +480,39 @@ function isAnnounceNode(n) {
   return isAnnounceText(n?.name) || isAnnounceText(n?.remark);
 }
 
-function isInfoNode(n) {
+function isDescriptionLine(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (isAnnounceText(t)) return true;
+  if (/осталось\s*дней|дней\s*осталось/i.test(t)) return true;
+  if (/если\s+что.+(не\s+)?работает|нажмите\s*🔄/i.test(t)) return true;
+  if (/^⚡\s*быстрые\s+сервера/i.test(t)) return true;
+  if (/^❗\s*lte\s+для\s+обхода/i.test(t)) return true;
+  if (/обход\s+глушилок/i.test(t)) return true;
+  return false;
+}
+
+function isInfoCarrierNode(n) {
   if (isAnnounceNode(n)) return true;
   const name = String(n?.name || n?.remark || "").trim();
-  if (!name) return false;
-  if (/осталось|дней|если что|быстр|lte|обход|нажмите|❗|⚡|🔄|ℹ️|не работает/i.test(name)) return true;
-  return false;
+  if (!isDescriptionLine(name)) return false;
+  if (/осталось\s*дней|дней\s*осталось/i.test(name)) return true;
+  const srv = String(n?.server || "").trim();
+  return !srv || srv === "0.0.0.0" || srv === "127.0.0.1" || srv === "localhost";
 }
 
 function extractSubscriptionInfo(body, nodes) {
   const lines = [];
   for (const n of nodes || []) {
-    if (!isInfoNode(n)) continue;
     const text = String(n.name || n.remark || "").trim();
+    if (!isDescriptionLine(text)) continue;
     if (text && !lines.includes(text)) lines.push(text);
   }
   for (const line of String(body || "").split(/\r?\n/)) {
     const item = line.trim();
     if (!item || item.startsWith("#") || /^happ:\/\/routing\//i.test(item)) continue;
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(item)) continue;
-    if (item.length < 3 || item.length > 240) continue;
+    if (!isDescriptionLine(item)) continue;
     if (!lines.includes(item)) lines.push(item);
   }
   return lines;
@@ -542,7 +555,7 @@ function announceError(body) {
 
 async function dropAnnounceNodes() {
   const state = await loadState();
-  const nodes = (state.nodes || []).filter((n) => !isInfoNode(n));
+  const nodes = (state.nodes || []).filter((n) => !isInfoCarrierNode(n));
   if (nodes.length === state.nodes.length) return false;
   const selectedId = nodes.some((n) => n.id === state.selectedId) ? state.selectedId : (nodes[0]?.id || null);
   await saveState({ nodes, selectedId });
@@ -720,7 +733,7 @@ async function importSubscription(url, name) {
   let group = state.groups.find((g) => g.url === normalized);
   const allParsed = StarlitUri.parseMany(body).map((n) => ({ ...n, groupId: group?.id || null }));
   const description = extractSubscriptionInfo(body, allParsed);
-  const parsed = allParsed.filter((n) => !isInfoNode(n));
+  const parsed = allParsed.filter((n) => !isInfoCarrierNode(n));
   const extra = {
     name: name || title || group?.name || "Starlit",
     url: normalized,
