@@ -327,6 +327,36 @@ select:focus-visible {
   justify-content: space-between;
   padding: var(--s3) var(--s4) var(--s2);
   flex: none;
+  position: relative;
+  overflow: hidden;
+}
+.stage-head.has-progress {
+  margin: 0 var(--s4);
+  padding: var(--s3) var(--s3) var(--s3);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--line);
+}
+.stage-head.has-progress::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--progress, 0%);
+  background: linear-gradient(90deg, rgba(139, 124, 255, 0.28), rgba(94, 234, 212, 0.14));
+  pointer-events: none;
+  transition: width 0.45s var(--ease);
+}
+.stage-head.has-progress.warn::before {
+  background: linear-gradient(90deg, rgba(255, 211, 122, 0.32), rgba(255, 155, 122, 0.16));
+}
+.stage-head.has-progress.danger::before {
+  background: linear-gradient(90deg, rgba(255, 122, 147, 0.36), rgba(255, 122, 147, 0.18));
+}
+.stage-head.has-progress > * {
+  position: relative;
+  z-index: 1;
 }
 .stage-head[hidden] { display: none !important; }
 .stage-head h1 {
@@ -401,6 +431,8 @@ select:focus-visible {
 
 /* ── Subscription chip ── */
 .sub {
+  position: relative;
+  overflow: hidden;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -408,10 +440,30 @@ select:focus-visible {
   padding: var(--s2) var(--s3);
   margin-bottom: var(--s2);
   border-radius: var(--r-md);
-  background: linear-gradient(180deg, rgba(139, 124, 255, 0.1), var(--bg-surface));
+  background: var(--bg-surface);
   border: 1px solid var(--line);
 }
-.sub-name, .sub-usage { margin: 0; }
+.sub-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--progress, 0%);
+  background: linear-gradient(90deg, rgba(139, 124, 255, 0.3), rgba(94, 234, 212, 0.15));
+  pointer-events: none;
+  transition: width 0.45s var(--ease);
+}
+.sub.warn .sub-fill {
+  background: linear-gradient(90deg, rgba(255, 211, 122, 0.34), rgba(255, 155, 122, 0.18));
+}
+.sub.danger .sub-fill {
+  background: linear-gradient(90deg, rgba(255, 122, 147, 0.38), rgba(255, 122, 147, 0.2));
+}
+.sub-name, .sub-usage {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+}
 .sub-name { font-weight: var(--fw-medium); font-size: var(--font-sm); }
 .sub-usage { color: var(--text-secondary); font-size: var(--font-xs); }
 .sub.updating { animation: sub-glow 1s ease-in-out infinite; }

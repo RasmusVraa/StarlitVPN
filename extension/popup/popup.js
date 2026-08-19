@@ -87,6 +87,46 @@ function bytes(n) {
   return `${Math.round(v / 1024)} KB`;
 }
 
+function trafficPct(group) {
+  const used = (group?.upload || 0) + (group?.download || 0);
+  const total = group?.total || 0;
+  if (!total) return 0;
+  return Math.min(100, Math.round((used / total) * 100));
+}
+
+function trafficTier(pct) {
+  if (pct >= 90) return "danger";
+  if (pct >= 70) return "warn";
+  return "";
+}
+
+function primaryGroup() {
+  const groups = (state?.groups || []).filter((g) => g.url);
+  return groups.find((g) => g.total > 0) || groups[0] || null;
+}
+
+function renderHeadProgress() {
+  const head = document.querySelector(".stage-head");
+  if (!head) return;
+  if (currentView !== "servers") {
+    head.style.removeProperty("--progress");
+    head.classList.remove("warn", "danger", "has-progress");
+    return;
+  }
+  const g = primaryGroup();
+  const pct = g?.total ? trafficPct(g) : 0;
+  if (!pct) {
+    head.style.removeProperty("--progress");
+    head.classList.remove("warn", "danger", "has-progress");
+    return;
+  }
+  head.style.setProperty("--progress", `${pct}%`);
+  head.classList.add("has-progress");
+  head.classList.remove("warn", "danger");
+  const tier = trafficTier(pct);
+  if (tier) head.classList.add(tier);
+}
+
 function techLine(node) {
   const outbound = (node.fullConfig?.outbounds || []).find((o) => o.protocol && o.protocol !== "freedom" && o.protocol !== "blackhole");
   const stream = outbound?.streamSettings || {};
@@ -227,11 +267,15 @@ function renderGroups() {
     const used = (g.upload || 0) + (g.download || 0);
     const total = g.total || 0;
     const usage = total ? `${bytes(used)} / ${bytes(total)}` : "";
-    return `<article class="sub">
+    const pct = total ? trafficPct(g) : 0;
+    const tier = trafficTier(pct);
+    return `<article class="sub${tier ? ` ${tier}` : ""}${pct ? " has-progress" : ""}"${pct ? ` style="--progress:${pct}%"` : ""}>
+      ${pct ? '<span class="sub-fill" aria-hidden="true"></span>' : ""}
       <p class="sub-name">${escapeHtml(g.name)}</p>
       <p class="sub-usage">${escapeHtml(usage)}</p>
     </article>`;
   }).join("");
+  renderHeadProgress();
 }
 
 function renderList() {
@@ -239,7 +283,9 @@ function renderList() {
   const q = ($("search")?.value || "").trim().toLowerCase();
   const hasAny = state.nodes.length > 0;
   const nodes = state.nodes.filter((n) => !q || `${n.name} ${StarlitFlags.stripFlagEmoji(n.name)} ${techLine(n)}`.toLowerCase().includes(q));
-  const signature = nodes.map((n) => `${n.id}:${n.latency ?? ""}:${n.id === state.selectedId ? 1 : 0}`).join("|") + q + (state.groups || []).length;
+  const signature = nodes.map((n) => `${n.id}:${n.latency ?? ""}:${n.id === state.selectedId ? 1 : 0}`).join("|")
+    + q
+    + (state.groups || []).map((g) => `${g.id}:${g.upload}:${g.download}:${g.total}`).join("|");
   if (signature === listSignature) return;
   listSignature = signature;
   renderGroups();
@@ -391,6 +437,7 @@ function render() {
   renderStatus();
   renderList();
   layoutChrome();
+  renderHeadProgress();
   renderUpdate();
   renderSetup();
   if (currentView === "settings") fillSettings();
