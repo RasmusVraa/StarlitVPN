@@ -64,7 +64,6 @@ function applyI18n(lang) {
   setText("btn-check-update-label", StarlitI18n.t(loc, "updateCheck"));
   setText("auto-sites-title", StarlitI18n.t(loc, "autoSites"));
   setText("auto-sites-hint", StarlitI18n.t(loc, "autoSitesHint"));
-  setText("auto-sites-popular", StarlitI18n.t(loc, "autoSitesPopular"));
   setText("btn-add-site", StarlitI18n.t(loc, "autoSiteAdd"));
   const autoSite = $("auto-site");
   if (autoSite) autoSite.placeholder = StarlitI18n.t(loc, "autoSitePlaceholder");
@@ -274,7 +273,7 @@ function renderAutoSites() {
   list.innerHTML = sites.map((site) => `
     <li class="site-item">
       <span>${escapeHtml(site)}</span>
-      <button type="button" class="site-del" data-site="${escapeHtml(site)}" title="${escapeHtml(StarlitI18n.t(loc, "delete"))}">×</button>
+      <button type="button" class="site-state" data-site="${escapeHtml(site)}" title="${escapeHtml(StarlitI18n.t(loc, "delete"))}">ON</button>
     </li>
   `).join("");
 }
@@ -308,20 +307,9 @@ on("auto-site", "keydown", (e) => {
   }
 });
 on("auto-site-list", "click", async (e) => {
-  const btn = e.target.closest(".site-del");
+  const btn = e.target.closest(".site-state");
   if (!btn) return;
   const res = await send("removeAutoSite", { site: btn.dataset.site });
-  if (res?.error) {
-    showToast(res.error);
-    return;
-  }
-  if (state) state.settings = { ...(state.settings || {}), autoSites: res.autoSites || [] };
-  renderAutoSites();
-});
-on("site-suggest", "click", async (e) => {
-  const chip = e.target.closest(".site-chip");
-  if (!chip) return;
-  const res = await send("addAutoSite", { site: chip.dataset.site });
   if (res?.error) {
     showToast(res.error);
     return;

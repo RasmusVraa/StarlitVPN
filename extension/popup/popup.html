@@ -91,21 +91,19 @@
     </section>
 
     <section class="view" id="view-settings">
-      <div class="panel">
+      <div class="panel hola-sites">
         <div class="auto-sites-head">
           <p class="panel-kicker" id="auto-sites-title">Автоподключение</p>
-          <span class="auto-sites-count" id="auto-sites-count">0</span>
+          <span class="auto-sites-mode">AUTO ON</span>
         </div>
-        <p class="hint" id="auto-sites-hint">Сайты из списка всегда идут через VPN, без ожидания</p>
+        <p class="hint" id="auto-sites-hint">Добавьте сайты, которые всегда должны открываться через VPN.</p>
         <div class="site-add hola-add">
           <input id="auto-site" type="text" placeholder="youtube.com" spellcheck="false" autocomplete="off" />
-          <button class="primary" id="btn-add-site" type="button">Добавить</button>
+          <button class="primary" id="btn-add-site" type="button">+ Добавить</button>
         </div>
-        <div class="site-suggest" id="site-suggest">
-          <span class="site-suggest-label" id="auto-sites-popular">Популярные:</span>
-          <button type="button" class="site-chip" data-site="youtube.com">youtube.com</button>
-          <button type="button" class="site-chip" data-site="netflix.com">netflix.com</button>
-          <button type="button" class="site-chip" data-site="instagram.com">instagram.com</button>
+        <div class="auto-sites-subhead">
+          <span class="site-suggest-label">Сайты</span>
+          <span class="auto-sites-count" id="auto-sites-count">0</span>
         </div>
         <p class="sheet-error" id="auto-site-error" hidden></p>
         <ul class="site-list" id="auto-site-list"></ul>

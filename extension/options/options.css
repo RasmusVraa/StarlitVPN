@@ -77,20 +77,20 @@ code { color: #c8c0ff; }
 .site-list { list-style: none; padding: 0 0 12px; margin: 0; }
 .site-list li {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px 6px 10px;
+  padding: 8px 10px;
   margin-top: 6px;
-  border-radius: 999px;
-  background: rgba(139, 124, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--stroke);
 }
 .auto-sites-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--muted);
+  color: #dcfff6;
   font-size: 13px;
   margin-bottom: 8px;
 }
@@ -104,29 +104,20 @@ code { color: #c8c0ff; }
   border: 1px solid rgba(139, 124, 255, 0.35);
 }
 .auto-sites-add { margin-bottom: 8px; }
-.site-suggest {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-.chip {
-  border: 1px solid var(--stroke);
-  border-radius: 999px;
-  padding: 4px 10px;
-  background: rgba(255,255,255,0.03);
-  color: var(--text);
-}
-.chip:hover {
-  background: rgba(139, 124, 255, 0.16);
-  border-color: rgba(139, 124, 255, 0.34);
-}
 .site-del {
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
-  padding: 0;
+  min-width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  padding: 0 8px;
+  border: 1px solid rgba(94, 234, 212, 0.45) !important;
+  background: rgba(94, 234, 212, 0.16) !important;
+  color: #dcfff6 !important;
+  font-weight: 700;
   line-height: 1;
+}
+.site-del:hover {
+  border-color: rgba(255, 122, 147, 0.6) !important;
+  background: rgba(255, 122, 147, 0.16) !important;
+  color: #ffd5de !important;
 }
 @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
