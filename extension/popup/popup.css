@@ -327,36 +327,6 @@ select:focus-visible {
   justify-content: space-between;
   padding: var(--s3) var(--s4) var(--s2);
   flex: none;
-  position: relative;
-  overflow: hidden;
-}
-.stage-head.has-progress {
-  margin: 0 var(--s4);
-  padding: var(--s3) var(--s3) var(--s3);
-  border-radius: var(--r-md);
-  background: var(--bg-surface);
-  border: 1px solid var(--line);
-}
-.stage-head.has-progress::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: var(--progress, 0%);
-  background: linear-gradient(90deg, rgba(139, 124, 255, 0.28), rgba(94, 234, 212, 0.14));
-  pointer-events: none;
-  transition: width 0.45s var(--ease);
-}
-.stage-head.has-progress.warn::before {
-  background: linear-gradient(90deg, rgba(255, 211, 122, 0.32), rgba(255, 155, 122, 0.16));
-}
-.stage-head.has-progress.danger::before {
-  background: linear-gradient(90deg, rgba(255, 122, 147, 0.36), rgba(255, 122, 147, 0.18));
-}
-.stage-head.has-progress > * {
-  position: relative;
-  z-index: 1;
 }
 .stage-head[hidden] { display: none !important; }
 .stage-head h1 {

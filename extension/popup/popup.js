@@ -100,33 +100,6 @@ function trafficTier(pct) {
   return "";
 }
 
-function primaryGroup() {
-  const groups = (state?.groups || []).filter((g) => g.url);
-  return groups.find((g) => g.total > 0) || groups[0] || null;
-}
-
-function renderHeadProgress() {
-  const head = document.querySelector(".stage-head");
-  if (!head) return;
-  if (currentView !== "servers") {
-    head.style.removeProperty("--progress");
-    head.classList.remove("warn", "danger", "has-progress");
-    return;
-  }
-  const g = primaryGroup();
-  const pct = g?.total ? trafficPct(g) : 0;
-  if (!pct) {
-    head.style.removeProperty("--progress");
-    head.classList.remove("warn", "danger", "has-progress");
-    return;
-  }
-  head.style.setProperty("--progress", `${pct}%`);
-  head.classList.add("has-progress");
-  head.classList.remove("warn", "danger");
-  const tier = trafficTier(pct);
-  if (tier) head.classList.add(tier);
-}
-
 function techLine(node) {
   const outbound = (node.fullConfig?.outbounds || []).find((o) => o.protocol && o.protocol !== "freedom" && o.protocol !== "blackhole");
   const stream = outbound?.streamSettings || {};
@@ -275,7 +248,6 @@ function renderGroups() {
       <p class="sub-usage">${escapeHtml(usage)}</p>
     </article>`;
   }).join("");
-  renderHeadProgress();
 }
 
 function renderList() {
@@ -437,7 +409,6 @@ function render() {
   renderStatus();
   renderList();
   layoutChrome();
-  renderHeadProgress();
   renderUpdate();
   renderSetup();
   if (currentView === "settings") fillSettings();
