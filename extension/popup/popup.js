@@ -265,6 +265,7 @@ function renderAutoSites() {
   const list = $("auto-site-list");
   if (!list) return;
   const sites = state?.settings?.autoSites || [];
+  const siteStates = state?.settings?.autoSiteStates || {};
   const enabled = state?.settings?.autoSitesEnabled !== false;
   const toggle = $("auto-sites-toggle");
   if (toggle) {
@@ -280,7 +281,7 @@ function renderAutoSites() {
     <li class="site-item">
       <span>${escapeHtml(site)}</span>
       <div class="site-actions">
-        <span class="site-state ${enabled ? "on" : "off"}">${enabled ? "ON" : "OFF"}</span>
+        <button type="button" class="site-state ${enabled && siteStates[site] !== false ? "on" : "off"}" data-site="${escapeHtml(site)}">${enabled && siteStates[site] !== false ? "ON" : "OFF"}</button>
         <button type="button" class="site-remove" data-site="${escapeHtml(site)}" title="${escapeHtml(StarlitI18n.t(loc, "delete"))}">✕</button>
       </div>
     </li>
@@ -295,7 +296,11 @@ async function addAutoSiteFromInput() {
     const res = await send("addAutoSite", { site: (input?.value || "").trim() });
     if (res?.error) throw new Error(res.error);
     if (input) input.value = "";
-    if (state) state.settings = { ...(state.settings || {}), autoSites: res.autoSites || [] };
+    if (state) state.settings = {
+      ...(state.settings || {}),
+      autoSites: res.autoSites || [],
+      autoSiteStates: res.autoSiteStates || {},
+    };
     renderAutoSites();
     showToast(StarlitI18n.t(loc, "saved"));
   } catch (e) {
@@ -316,6 +321,20 @@ on("auto-site", "keydown", (e) => {
   }
 });
 on("auto-site-list", "click", async (e) => {
+  const stateBtn = e.target.closest(".site-state");
+  if (stateBtn) {
+    const site = stateBtn.dataset.site;
+    const siteStates = state?.settings?.autoSiteStates || {};
+    const isOn = (state?.settings?.autoSitesEnabled !== false) && siteStates[site] !== false;
+    const res = await send("toggleAutoSite", { site, enabled: !isOn });
+    if (res?.error) {
+      showToast(res.error);
+      return;
+    }
+    if (state) state.settings = { ...(state.settings || {}), autoSiteStates: res.autoSiteStates || {} };
+    renderAutoSites();
+    return;
+  }
   const btn = e.target.closest(".site-remove");
   if (!btn) return;
   const res = await send("removeAutoSite", { site: btn.dataset.site });
@@ -323,7 +342,11 @@ on("auto-site-list", "click", async (e) => {
     showToast(res.error);
     return;
   }
-  if (state) state.settings = { ...(state.settings || {}), autoSites: res.autoSites || [] };
+  if (state) state.settings = {
+    ...(state.settings || {}),
+    autoSites: res.autoSites || [],
+    autoSiteStates: res.autoSiteStates || {},
+  };
   renderAutoSites();
 });
 on("auto-sites-toggle", "click", async () => {

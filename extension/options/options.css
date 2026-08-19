@@ -141,6 +141,7 @@ code { color: #c8c0ff; }
   color: #dcfff6;
   font-weight: 700;
   font-size: 11px;
+  cursor: pointer;
 }
 .site-state.off {
   border-color: rgba(255, 255, 255, 0.2);

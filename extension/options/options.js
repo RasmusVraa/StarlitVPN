@@ -6,6 +6,7 @@ const fields = ["attachMode", "attachHost", "attachPort", "socksPort", "routing"
 
 let autoSites = [];
 let autoSitesEnabled = true;
+let autoSiteStates = {};
 
 function paintSites() {
   const list = $("auto-site-list");
@@ -25,7 +26,7 @@ function paintSites() {
     <li>
       <span>${site}</span>
       <div class="site-actions">
-        <span class="site-state ${autoSitesEnabled ? "on" : "off"}">${autoSitesEnabled ? "ON" : "OFF"}</span>
+        <button type="button" class="site-state ${autoSitesEnabled && autoSiteStates[site] !== false ? "on" : "off"}" data-site="${site}">${autoSitesEnabled && autoSiteStates[site] !== false ? "ON" : "OFF"}</button>
         <button type="button" class="ghost site-del" data-site="${site}" title="Удалить">✕</button>
       </div>
     </li>
@@ -42,6 +43,7 @@ async function load() {
   $("routing").value = s.routing || "bypass-private";
   $("language").value = s.language || "auto";
   autoSites = s.autoSites || [];
+  autoSiteStates = s.autoSiteStates || {};
   autoSitesEnabled = s.autoSitesEnabled !== false;
   paintSites();
   paintCore(state.nativeProbe);
@@ -103,14 +105,26 @@ $("btn-add-site")?.addEventListener("click", async () => {
   }
   if (input) input.value = "";
   autoSites = res.autoSites || [];
+  autoSiteStates = res.autoSiteStates || autoSiteStates;
   paintSites();
 });
 
 $("auto-site-list")?.addEventListener("click", async (e) => {
+  const stateBtn = e.target.closest(".site-state");
+  if (stateBtn) {
+    const site = stateBtn.dataset.site;
+    const isOn = autoSitesEnabled && autoSiteStates[site] !== false;
+    const res = await send("toggleAutoSite", { site, enabled: !isOn });
+    if (res?.error) return;
+    autoSiteStates = res.autoSiteStates || autoSiteStates;
+    paintSites();
+    return;
+  }
   const btn = e.target.closest(".site-del");
   if (!btn) return;
   const res = await send("removeAutoSite", { site: btn.dataset.site });
   autoSites = res.autoSites || [];
+  autoSiteStates = res.autoSiteStates || autoSiteStates;
   paintSites();
 });
 

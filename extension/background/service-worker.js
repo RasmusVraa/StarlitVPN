@@ -18,6 +18,7 @@ const DEFAULT_STATE = {
     loglevel: "warning",
     autoSites: [],
     autoSitesEnabled: true,
+    autoSiteStates: {},
   },
   session: {
     connected: false,
@@ -43,6 +44,7 @@ async function loadState() {
   cachedAttachPort = Number(settings.attachPort || 10808);
   cachedAttachMode = !!settings.attachMode;
   cachedAutoSitesEnabled = settings.autoSitesEnabled !== false;
+  cachedEnabledAutoSites = enabledAutoSitesFromSettings(settings);
   return {
     nodes: stored.nodes || [],
     groups: stored.groups || [],
@@ -149,6 +151,7 @@ let cachedAttachHost = "127.0.0.1";
 let cachedAttachPort = 10808;
 let cachedAttachMode = false;
 let cachedAutoSitesEnabled = true;
+let cachedEnabledAutoSites = [];
 let autoPacInstalled = false;
 let autoPacKey = "";
 let fullTunnel = false;
@@ -187,31 +190,65 @@ function urlMatchesSites(url, sites) {
   return sites.some((site) => host === site || host.endsWith("." + site));
 }
 
+function enabledAutoSitesFromSettings(settings) {
+  const allSites = settings?.autoSites || [];
+  const states = settings?.autoSiteStates || {};
+  return allSites.filter((site) => states[site] !== false);
+}
+
 async function addAutoSite(input) {
   const site = normalizeSite(input);
   if (!site) throw new Error("Введите домен, например youtube.com");
   const state = await loadState();
   const autoSites = [...new Set([...(state.settings.autoSites || []), site])].slice(0, 80);
-  await saveState({ settings: { ...state.settings, autoSites } });
+  const autoSiteStates = { ...(state.settings.autoSiteStates || {}) };
+  autoSiteStates[site] = true;
+  await saveState({ settings: { ...state.settings, autoSites, autoSiteStates } });
   cachedAutoSites = autoSites;
+  cachedEnabledAutoSites = autoSites.filter((s) => autoSiteStates[s] !== false);
   if (cachedAutoSitesEnabled) installAutoPac().catch(() => {});
-  return { site, autoSites };
+  return { site, autoSites, autoSiteStates };
 }
 
 async function removeAutoSite(input) {
   const site = normalizeSite(input) || String(input || "").trim().toLowerCase();
   const state = await loadState();
   const autoSites = (state.settings.autoSites || []).filter((s) => s !== site);
-  await saveState({ settings: { ...state.settings, autoSites } });
+  const autoSiteStates = { ...(state.settings.autoSiteStates || {}) };
+  delete autoSiteStates[site];
+  await saveState({ settings: { ...state.settings, autoSites, autoSiteStates } });
   cachedAutoSites = autoSites;
-  if (!autoSites.length) {
+  cachedEnabledAutoSites = autoSites.filter((s) => autoSiteStates[s] !== false);
+  if (!cachedEnabledAutoSites.length) {
     autoPacInstalled = false;
     autoPacKey = "";
     if (!fullTunnel) await clearBrowserProxy();
   } else if (!fullTunnel) {
     await installAutoPac();
   }
-  return { autoSites };
+  return { autoSites, autoSiteStates };
+}
+
+async function toggleAutoSite(input, enabled) {
+  const site = normalizeSite(input) || String(input || "").trim().toLowerCase();
+  if (!site) throw new Error("Некорректный сайт");
+  const state = await loadState();
+  const autoSites = state.settings.autoSites || [];
+  if (!autoSites.includes(site)) throw new Error("Сайт не найден");
+  const autoSiteStates = { ...(state.settings.autoSiteStates || {}) };
+  autoSiteStates[site] = !!enabled;
+  await saveState({ settings: { ...state.settings, autoSiteStates } });
+  cachedEnabledAutoSites = autoSites.filter((s) => autoSiteStates[s] !== false);
+  if (!fullTunnel) {
+    if (cachedAutoSitesEnabled && cachedEnabledAutoSites.length) await installAutoPac();
+    else {
+      autoPacInstalled = false;
+      autoPacKey = "";
+      await clearBrowserProxy();
+      markAutoBadge(false);
+    }
+  }
+  return { autoSites, autoSiteStates };
 }
 
 function autoProxyTarget() {
@@ -221,11 +258,11 @@ function autoProxyTarget() {
 }
 
 async function installAutoPac() {
-  if (!cachedAutoSitesEnabled || !cachedAutoSites.length || fullTunnel) return;
+  if (!cachedAutoSitesEnabled || !cachedEnabledAutoSites.length || fullTunnel) return;
   const { port, host } = autoProxyTarget();
-  const key = `auto|${host}|${port}|${cachedAutoSites.join(",")}`;
+  const key = `auto|${host}|${port}|${cachedEnabledAutoSites.join(",")}`;
   if (autoPacInstalled && autoPacKey === key) return;
-  await applyBrowserProxy(port, host, { sites: cachedAutoSites });
+  await applyBrowserProxy(port, host, { sites: cachedEnabledAutoSites });
   autoPacInstalled = true;
   autoPacKey = key;
 }
@@ -284,7 +321,7 @@ async function maybeAutoConnect(url) {
   if (Date.now() < autoHoldUntil) return;
   if (!cachedAutoSitesEnabled) return;
   if (fullTunnel) return;
-  if (!urlMatchesSites(url, cachedAutoSites)) return;
+  if (!urlMatchesSites(url, cachedEnabledAutoSites)) return;
   markAutoBadge(true);
   ensureWarm().catch(() => {});
 }
@@ -292,8 +329,8 @@ async function maybeAutoConnect(url) {
 async function maybeAutoDisconnect() {
   if (!cachedAutoSitesEnabled) return;
   if (fullTunnel) return;
-  if (!cachedAutoSites.length) return;
-  if (await anyAutoSiteTab(cachedAutoSites)) return;
+  if (!cachedEnabledAutoSites.length) return;
+  if (await anyAutoSiteTab(cachedEnabledAutoSites)) return;
   markAutoBadge(false);
 }
 
@@ -910,7 +947,7 @@ ext.runtime.onStartup.addListener(async () => {
     catch { await saveState({ session: { ...DEFAULT_STATE.session, error: "Не удалось восстановить соединение" } }); }
     return;
   }
-  if (state.settings.autoSitesEnabled !== false && state.settings.autoSites?.length) installAutoPac().catch(() => {});
+  if (state.settings.autoSitesEnabled !== false && enabledAutoSitesFromSettings(state.settings).length) installAutoPac().catch(() => {});
   try {
     const tabs = await ext.tabs.query({});
     for (const tab of tabs) {
@@ -1002,6 +1039,8 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return { ok: true, ...(await addAutoSite(msg.site)) };
       case "removeAutoSite":
         return { ok: true, ...(await removeAutoSite(msg.site)) };
+      case "toggleAutoSite":
+        return { ok: true, ...(await toggleAutoSite(msg.site, msg.enabled)) };
       case "importText":
         return { ok: true, ...(await importText(msg.text, msg.groupId, msg.groupName)) };
       case "importSubscription":
@@ -1024,7 +1063,7 @@ ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         await saveState({ settings: { ...state.settings, ...msg.settings } });
         await loadState();
         if (!fullTunnel) {
-          if (cachedAutoSitesEnabled && cachedAutoSites.length) {
+          if (cachedAutoSitesEnabled && cachedEnabledAutoSites.length) {
             installAutoPac().catch(() => {});
           } else {
             autoPacInstalled = false;
@@ -1065,14 +1104,14 @@ if (ext.webNavigation?.onBeforeNavigate) {
   ext.webNavigation.onBeforeNavigate.addListener((details) => {
     if (details.frameId !== 0) return;
     maybeAutoConnect(details.url);
-    if (!urlMatchesSites(details.url, cachedAutoSites)) scheduleAutoDisconnect();
+    if (!urlMatchesSites(details.url, cachedEnabledAutoSites)) scheduleAutoDisconnect();
   });
 }
 if (ext.tabs?.onUpdated) {
   ext.tabs.onUpdated.addListener((_id, info) => {
     if (!info.url) return;
     maybeAutoConnect(info.url);
-    if (!urlMatchesSites(info.url, cachedAutoSites)) scheduleAutoDisconnect();
+    if (!urlMatchesSites(info.url, cachedEnabledAutoSites)) scheduleAutoDisconnect();
   });
 }
 if (ext.tabs?.onRemoved) {
@@ -1087,7 +1126,8 @@ ext.storage.local.get(["settings", "session"], (stored) => {
   cachedAttachPort = Number(settings.attachPort || 10808);
   cachedAttachMode = !!settings.attachMode;
   cachedAutoSitesEnabled = settings.autoSitesEnabled !== false;
+  cachedEnabledAutoSites = enabledAutoSitesFromSettings(settings);
   if (stored?.session?.connected && !stored.session.autoConnected) fullTunnel = true;
   autoBadgeOn = !!(stored?.session?.connected);
-  if (cachedAutoSitesEnabled && cachedAutoSites.length && !fullTunnel) installAutoPac().catch(() => {});
+  if (cachedAutoSitesEnabled && cachedEnabledAutoSites.length && !fullTunnel) installAutoPac().catch(() => {});
 });
