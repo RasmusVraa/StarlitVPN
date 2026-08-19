@@ -1,5 +1,5 @@
 if (typeof importScripts === "function") {
-  importScripts("../lib/browser.js", "../lib/uri.js", "../lib/xray-config.js", "../lib/config.js");
+  importScripts("../lib/browser.js", "../lib/uri.js", "../lib/happ-routing.js", "../lib/xray-config.js", "../lib/config.js");
 }
 
 const NATIVE_HOST = "com.starlitvpn.host";
@@ -305,7 +305,7 @@ async function ensureWarm() {
     if (coreWarm && state.session.warmNodeId === node.id) return;
     if (state.session.connecting || (state.session.connected && !state.session.autoConnected)) return;
     const port = Number(state.settings.socksPort);
-    const config = StarlitXray.buildConfig(node, state.settings);
+    const config = StarlitXray.buildConfig(node, state.settings, routingForNode(state, node));
     const started = await nativeSend({ cmd: "start", force: false, config, configText: JSON.stringify(config), port });
     if (!started.ok) return;
     coreWarm = true;
@@ -388,7 +388,7 @@ async function connect(nodeId, opts = {}) {
       return session;
     }
 
-    const config = StarlitXray.buildConfig(node, state.settings);
+    const config = StarlitXray.buildConfig(node, state.settings, routingForNode(state, node));
     const started = await nativeSend({
       cmd: "start",
       force: true,
@@ -480,6 +480,41 @@ function isAnnounceNode(n) {
   return isAnnounceText(n?.name) || isAnnounceText(n?.remark);
 }
 
+function isInfoNode(n) {
+  if (isAnnounceNode(n)) return true;
+  const name = String(n?.name || n?.remark || "").trim();
+  if (!name) return false;
+  if (/осталось|дней|если что|быстр|lte|обход|нажмите|❗|⚡|🔄|ℹ️|не работает/i.test(name)) return true;
+  return false;
+}
+
+function extractSubscriptionInfo(body, nodes) {
+  const lines = [];
+  for (const n of nodes || []) {
+    if (!isInfoNode(n)) continue;
+    const text = String(n.name || n.remark || "").trim();
+    if (text && !lines.includes(text)) lines.push(text);
+  }
+  for (const line of String(body || "").split(/\r?\n/)) {
+    const item = line.trim();
+    if (!item || item.startsWith("#") || /^happ:\/\/routing\//i.test(item)) continue;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(item)) continue;
+    if (item.length < 3 || item.length > 240) continue;
+    if (!lines.includes(item)) lines.push(item);
+  }
+  return lines;
+}
+
+function groupHappRouting(group) {
+  if (!group?.happRouting || group.happRouting.off) return null;
+  return group.happRouting;
+}
+
+function routingForNode(state, node) {
+  const group = state.groups?.find((g) => g.id === node?.groupId);
+  return groupHappRouting(group);
+}
+
 function subscriptionLooksLikeAnnounce(body) {
   const raw = String(body || "");
   let nodes = [];
@@ -507,7 +542,7 @@ function announceError(body) {
 
 async function dropAnnounceNodes() {
   const state = await loadState();
-  const nodes = (state.nodes || []).filter((n) => !isAnnounceNode(n));
+  const nodes = (state.nodes || []).filter((n) => !isInfoNode(n));
   if (nodes.length === state.nodes.length) return false;
   const selectedId = nodes.some((n) => n.id === state.selectedId) ? state.selectedId : (nodes[0]?.id || null);
   await saveState({ nodes, selectedId });
@@ -638,6 +673,7 @@ async function fetchSubscription(url) {
     "subscription-userinfo": res.headers.get("subscription-userinfo") || "",
     "profile-title": res.headers.get("profile-title") || "",
     "profile-update-interval": res.headers.get("profile-update-interval") || "",
+    routing: res.headers.get("routing") || res.headers.get("Routing") || "",
     "x-hwid-active": res.headers.get("x-hwid-active") || "",
     "x-hwid-not-supported": res.headers.get("x-hwid-not-supported") || "",
     "x-hwid-max-devices-reached": res.headers.get("x-hwid-max-devices-reached") || "",
@@ -679,8 +715,12 @@ async function importSubscription(url, name) {
   const { body, headers } = await fetchSubscription(normalized);
   const info = parseUserInfo(headers["subscription-userinfo"]);
   const title = decodeProfileTitle(headers["profile-title"]);
+  const happRouting = StarlitHapp.extractHappRouting(body, headers);
   const state = await loadState();
   let group = state.groups.find((g) => g.url === normalized);
+  const allParsed = StarlitUri.parseMany(body).map((n) => ({ ...n, groupId: group?.id || null }));
+  const description = extractSubscriptionInfo(body, allParsed);
+  const parsed = allParsed.filter((n) => !isInfoNode(n));
   const extra = {
     name: name || title || group?.name || "Starlit",
     url: normalized,
@@ -690,17 +730,20 @@ async function importSubscription(url, name) {
     download: info.download ? Number(info.download) : 0,
     total: info.total ? Number(info.total) : 0,
     updateInterval: headers["profile-update-interval"] || "",
+    description,
+    happRouting: happRouting || null,
+    happRoutingName: happRouting?.Name || (happRouting?.off ? "" : ""),
   };
   if (!group) group = { id: crypto.randomUUID(), ...extra };
   else group = { ...group, ...extra };
   const groups = state.groups.filter((g) => g.id !== group.id).concat([group]);
   const oldIds = new Set(state.nodes.filter((n) => n.groupId === group.id).map((n) => n.id));
   const kept = state.nodes.filter((n) => n.groupId !== group.id);
-  const parsed = StarlitUri.parseMany(body).map((n) => ({ ...n, groupId: group.id })).filter((n) => !isAnnounceNode(n));
-  if (!parsed.length) throw new Error(announceError(body));
-  const selectedId = state.selectedId && oldIds.has(state.selectedId) ? (parsed[0]?.id || null) : state.selectedId;
-  await saveState({ nodes: kept.concat(parsed), groups, selectedId: selectedId || parsed[0]?.id || null });
-  return { added: parsed.length, group };
+  const withGroup = parsed.map((n) => ({ ...n, groupId: group.id }));
+  if (!withGroup.length) throw new Error(announceError(body));
+  const selectedId = state.selectedId && oldIds.has(state.selectedId) ? (withGroup[0]?.id || null) : state.selectedId;
+  await saveState({ nodes: kept.concat(withGroup), groups, selectedId: selectedId || withGroup[0]?.id || null });
+  return { added: withGroup.length, group };
 }
 
 async function updateSubscriptions() {

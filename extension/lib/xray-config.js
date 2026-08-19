@@ -202,7 +202,7 @@
     return rules;
   }
 
-  function buildConfig(node, settings = {}) {
+  function buildConfig(node, settings = {}, happRouting = null) {
     if (node.fullConfig?.inbounds && node.fullConfig?.outbounds) {
       return node.fullConfig;
     }
@@ -210,6 +210,13 @@
     const httpPort = Number(settings.httpPort || socksPort + 1);
     const outbound = outboundFromNode(node);
     outbound.tag = "proxy";
+    const happ = typeof StarlitHapp !== "undefined" ? StarlitHapp.toXrayRules(happRouting) : null;
+    const routing = happ
+      ? { domainStrategy: happ.domainStrategy, rules: happ.rules }
+      : {
+        domainStrategy: "AsIs",
+        rules: routingRules(settings.routing || "bypass-private"),
+      };
     return {
       log: { loglevel: settings.loglevel || "warning" },
       inbounds: [
@@ -234,10 +241,7 @@
         { tag: "direct", protocol: "freedom" },
         { tag: "block", protocol: "blackhole" },
       ],
-      routing: {
-        domainStrategy: "AsIs",
-        rules: routingRules(settings.routing || "bypass-private"),
-      },
+      routing,
     };
   }
 

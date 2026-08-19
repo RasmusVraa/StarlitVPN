@@ -575,7 +575,7 @@ internal static class Program
     {
         var headers = new Dictionary<string, object>();
         foreach (var key in new[] {
-            "subscription-userinfo", "profile-title", "profile-update-interval", "profile-web-page-url",
+            "subscription-userinfo", "profile-title", "profile-update-interval", "profile-web-page-url", "routing",
             "x-hwid-active", "x-hwid-not-supported", "x-hwid-max-devices-reached", "x-hwid-limit"
         })
         {

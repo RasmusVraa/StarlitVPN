@@ -232,6 +232,21 @@ function renderStatus() {
   }
 }
 
+function fmtSubMeta(group) {
+  const parts = [];
+  if (group.updatedAt) {
+    const d = new Date(group.updatedAt);
+    parts.push(d.toLocaleString("ru-RU", {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    }).replace(",", ""));
+  }
+  if (group.updateInterval) {
+    const iv = String(group.updateInterval).replace(/[^\d]/g, "");
+    if (iv) parts.push(`Автообновление - ${iv}ч.`);
+  }
+  return parts.join(" | ");
+}
+
 function renderGroups() {
   const box = $("groups");
   if (!box) return;
@@ -242,10 +257,24 @@ function renderGroups() {
     const usage = total ? `${bytes(used)} / ${bytes(total)}` : "";
     const pct = total ? trafficPct(g) : 0;
     const tier = trafficTier(pct);
+    const meta = fmtSubMeta(g);
+    const desc = (g.description || []).filter(Boolean);
+    const routing = g.happRouting && !g.happRouting.off
+      ? (g.happRoutingName || g.happRouting.Name || "Happ routing")
+      : "";
     return `<article class="sub${tier ? ` ${tier}` : ""}${pct ? " has-progress" : ""}"${pct ? ` style="--progress:${pct}%"` : ""}>
       ${pct ? '<span class="sub-fill" aria-hidden="true"></span>' : ""}
-      <p class="sub-name">${escapeHtml(g.name)}</p>
-      <p class="sub-usage">${escapeHtml(usage)}</p>
+      <div class="sub-body">
+        <div class="sub-row">
+          <div class="sub-title-wrap">
+            <p class="sub-name">${escapeHtml(g.name)}</p>
+            ${meta ? `<p class="sub-meta">${escapeHtml(meta)}</p>` : ""}
+          </div>
+          <p class="sub-usage">${escapeHtml(usage)}</p>
+        </div>
+        ${desc.length ? `<div class="sub-desc">${desc.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>` : ""}
+        ${routing ? `<p class="sub-routing">Routing: ${escapeHtml(routing)}</p>` : ""}
+      </div>
     </article>`;
   }).join("");
 }
@@ -257,7 +286,7 @@ function renderList() {
   const nodes = state.nodes.filter((n) => !q || `${n.name} ${StarlitFlags.stripFlagEmoji(n.name)} ${techLine(n)}`.toLowerCase().includes(q));
   const signature = nodes.map((n) => `${n.id}:${n.latency ?? ""}:${n.id === state.selectedId ? 1 : 0}`).join("|")
     + q
-    + (state.groups || []).map((g) => `${g.id}:${g.upload}:${g.download}:${g.total}`).join("|");
+    + (state.groups || []).map((g) => `${g.id}:${g.upload}:${g.download}:${g.total}:${(g.description || []).join("|")}`).join("|");
   if (signature === listSignature) return;
   listSignature = signature;
   renderGroups();
