@@ -258,7 +258,6 @@ function renderGroups() {
     const pct = total ? trafficPct(g) : 0;
     const tier = trafficTier(pct);
     const meta = fmtSubMeta(g);
-    const desc = (g.description || []).filter(Boolean);
     return `<article class="sub${tier ? ` ${tier}` : ""}">
       <div class="sub-body">
         <p class="sub-name">${escapeHtml(g.name)}</p>
@@ -267,7 +266,6 @@ function renderGroups() {
           <span class="sub-fill" aria-hidden="true"></span>
           <span class="sub-usage">${escapeHtml(usage)}</span>
         </div>` : ""}
-        ${desc.length ? `<div class="sub-desc">${desc.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>` : ""}
       </div>
     </article>`;
   }).join("");

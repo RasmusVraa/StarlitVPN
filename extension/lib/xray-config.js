@@ -203,14 +203,17 @@
   }
 
   function buildConfig(node, settings = {}, happRouting = null) {
+    const happ = typeof StarlitHapp !== "undefined" ? StarlitHapp.toXrayRules(happRouting) : null;
     if (node.fullConfig?.inbounds && node.fullConfig?.outbounds) {
-      return node.fullConfig;
+      if (!happ) return node.fullConfig;
+      const cfg = JSON.parse(JSON.stringify(node.fullConfig));
+      cfg.routing = { domainStrategy: happ.domainStrategy, rules: happ.rules };
+      return cfg;
     }
     const socksPort = Number(settings.socksPort || 10808);
     const httpPort = Number(settings.httpPort || socksPort + 1);
     const outbound = outboundFromNode(node);
     outbound.tag = "proxy";
-    const happ = typeof StarlitHapp !== "undefined" ? StarlitHapp.toXrayRules(happRouting) : null;
     const routing = happ
       ? { domainStrategy: happ.domainStrategy, rules: happ.rules }
       : {
