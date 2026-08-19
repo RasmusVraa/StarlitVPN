@@ -133,9 +133,12 @@ function setView(name) {
 
 function layoutChrome() {
   const hasAny = !!(state?.nodes?.length);
+  const onImport = currentView === "import";
   const emptyServers = currentView === "servers" && !hasAny;
   const hero = $("hero");
-  if (hero) hero.hidden = emptyServers;
+  if (hero) hero.hidden = emptyServers || onImport;
+  const head = document.querySelector(".stage-head");
+  if (head) head.hidden = onImport;
   const ping = $("btn-ping");
   const subs = $("btn-subs");
   if (ping) ping.hidden = currentView !== "servers" || !hasAny;
@@ -270,6 +273,7 @@ function renderAutoSites() {
   const toggle = $("auto-sites-toggle");
   if (toggle) {
     toggle.textContent = enabled ? "AUTO ON" : "AUTO OFF";
+    toggle.classList.toggle("on", enabled);
     toggle.classList.toggle("off", !enabled);
   }
   setText("auto-sites-count", String(sites.length));

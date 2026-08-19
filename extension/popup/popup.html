@@ -7,40 +7,42 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <aside class="rail">
+  <aside class="rail" aria-label="Навигация">
     <a class="rail-logo-link" id="rail-cabinet" href="https://cabinet.starlit-moon.ru" target="_blank" rel="noopener" title="Личный кабинет">
       <img class="rail-logo" src="../icons/logo.png" alt="StarlitVPN" width="32" height="32" />
     </a>
-    <button class="rail-btn active" id="nav-servers" type="button" data-view="servers" title="Серверы">
-      <span class="ico ico-globe" aria-hidden="true"></span>
-    </button>
-    <button class="rail-btn" id="btn-add" type="button" data-view="import" title="Добавить">
-      <span class="ico ico-plus" aria-hidden="true"></span>
-    </button>
-    <span class="rail-spacer"></span>
-    <button class="rail-btn" id="btn-settings" type="button" data-view="settings" title="Настройки">
-      <span class="ico ico-gear" aria-hidden="true"></span>
-    </button>
+    <nav class="rail-nav">
+      <button class="rail-btn active" id="nav-servers" type="button" data-view="servers" title="Серверы">
+        <span class="ico ico-globe" aria-hidden="true"></span>
+      </button>
+      <button class="rail-btn" id="btn-add" type="button" data-view="import" title="Добавить">
+        <span class="ico ico-plus" aria-hidden="true"></span>
+      </button>
+      <button class="rail-btn" id="btn-settings" type="button" data-view="settings" title="Настройки">
+        <span class="ico ico-gear" aria-hidden="true"></span>
+      </button>
+    </nav>
   </aside>
 
   <main class="stage">
-    <section class="hero" id="hero">
+    <section class="hero" id="hero" aria-label="Статус VPN">
       <button class="power" id="btn-power" type="button" aria-label="Подключить">
-        <span class="power-ring"></span>
+        <span class="power-ring" aria-hidden="true"></span>
         <span class="ico ico-power" aria-hidden="true"></span>
       </button>
       <div class="hero-copy">
-        <p class="status" id="status-label">Отключено</p>
+        <p class="status" id="status-label">Не подключено</p>
         <p class="hero-hint" id="power-hint">Нажмите, чтобы включить VPN</p>
       </div>
       <button class="location" id="location-card" type="button">
         <span class="flag dock-flag" id="dock-flag" hidden></span>
+        <span class="location-label">Сервер</span>
         <span class="current" id="current-name">Выберите сервер</span>
         <span class="location-chevron" aria-hidden="true"></span>
       </button>
     </section>
 
-    <div class="update-bar" id="update-bar" hidden>
+    <div class="update-bar" id="update-bar" hidden role="status">
       <span id="update-text">Доступно обновление</span>
       <button type="button" id="btn-update">Обновить</button>
     </div>
@@ -57,7 +59,7 @@
       </div>
     </header>
 
-    <section class="view on" id="view-servers">
+    <section class="view on" id="view-servers" aria-label="Список серверов">
       <label class="search" id="search-bar">
         <span class="ico ico-search" aria-hidden="true"></span>
         <input id="search" type="search" placeholder="Поиск сервера" autocomplete="off" />
@@ -65,8 +67,8 @@
       <div id="groups"></div>
       <ul class="list" id="server-list"></ul>
       <div class="empty" id="empty" hidden>
-        <img class="empty-logo" src="../icons/logo.png" alt="" width="88" height="88" />
-        <p id="empty-text">Нет подписки. Откройте личный кабинет Starlit.</p>
+        <img class="empty-logo" src="../icons/logo.png" alt="" width="72" height="72" />
+        <p class="empty-title" id="empty-text">Нет подписки. Откройте личный кабинет Starlit.</p>
         <a class="cabinet-btn hero" id="empty-cabinet" href="https://cabinet.starlit-moon.ru" target="_blank" rel="noopener">
           <span class="ico ico-person" aria-hidden="true"></span>
           <span data-i18n="cabinet">Личный кабинет</span>
@@ -75,13 +77,19 @@
       </div>
     </section>
 
-    <section class="view" id="view-import">
-      <div class="panel">
+    <section class="view" id="view-import" aria-label="Добавление подписки">
+      <div class="panel panel-import">
         <p class="panel-kicker">Шаг 1</p>
-        <h2>Подписка Starlit</h2>
+        <h2 class="panel-title">Подписка Starlit</h2>
         <p class="lead">Скопируйте ссылку из кабинета — она начинается с <strong>sub.starlit-moon.ru</strong></p>
-        <input id="import-url" type="url" placeholder="https://sub.starlit-moon.ru/…" spellcheck="false" autocomplete="off" />
-        <input id="import-name" type="text" placeholder="Имя (необязательно)" />
+        <label class="field">
+          <span class="field-label">URL подписки</span>
+          <input id="import-url" type="url" placeholder="https://sub.starlit-moon.ru/…" spellcheck="false" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span class="field-label">Имя (необязательно)</span>
+          <input id="import-name" type="text" placeholder="Моя подписка" />
+        </label>
         <p class="sheet-error" id="sheet-error" hidden></p>
       </div>
       <div class="form-actions">
@@ -90,70 +98,82 @@
       </div>
     </section>
 
-    <section class="view" id="view-settings">
-      <div class="panel hola-sites">
-        <div class="auto-sites-head">
-          <p class="panel-kicker" id="auto-sites-title">Автоподключение</p>
-          <button class="auto-sites-mode" id="auto-sites-toggle" type="button">AUTO ON</button>
+    <section class="view" id="view-settings" aria-label="Настройки">
+      <div class="panel panel-auto">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker" id="auto-sites-title">Автоподключение</p>
+            <p class="hint panel-desc" id="auto-sites-hint">Сайты из списка всегда идут через VPN.</p>
+          </div>
+          <button class="pill-toggle on" id="auto-sites-toggle" type="button">AUTO ON</button>
         </div>
-        <p class="hint" id="auto-sites-hint">Добавьте сайты, которые всегда должны открываться через VPN.</p>
-        <div class="site-add hola-add">
+        <div class="site-add">
           <input id="auto-site" type="text" placeholder="youtube.com" spellcheck="false" autocomplete="off" />
           <button class="primary" id="btn-add-site" type="button">+ Добавить</button>
         </div>
         <div class="auto-sites-subhead">
           <span class="site-suggest-label">Сайты</span>
-          <span class="auto-sites-count" id="auto-sites-count">0</span>
+          <span class="badge-count" id="auto-sites-count">0</span>
         </div>
         <p class="sheet-error" id="auto-site-error" hidden></p>
         <ul class="site-list" id="auto-site-list"></ul>
       </div>
+
       <div class="panel">
-        <label>Маршрутизация
+        <p class="panel-kicker">Соединение</p>
+        <label class="field">
+          <span class="field-label">Маршрутизация</span>
           <select id="routing">
             <option value="bypass-private">Прокси, обход LAN</option>
             <option value="global">Весь трафик в прокси</option>
             <option value="bypass-lan-cn">Прокси, обход LAN и CN</option>
           </select>
         </label>
-        <label>Язык
+        <label class="field">
+          <span class="field-label">Язык</span>
           <select id="language">
             <option value="auto">Авто</option>
             <option value="ru">Русский</option>
             <option value="en">English</option>
           </select>
         </label>
-        <p class="hint" id="core-status"></p>
-        <p class="hint" id="app-version"></p>
-        <p class="hint" id="update-status"></p>
+      </div>
+
+      <div class="panel panel-meta">
+        <p class="panel-kicker">О расширении</p>
+        <p class="hint meta-line" id="core-status"></p>
+        <p class="hint meta-line" id="app-version"></p>
+        <p class="hint meta-line" id="update-status"></p>
         <button class="text-btn quiet" id="btn-check-update" type="button">
           <span class="ico ico-download" aria-hidden="true"></span>
           <span id="btn-check-update-label">Проверить обновления</span>
         </button>
       </div>
+
       <details class="advanced">
         <summary>Для продвинутых</summary>
         <label class="check"><input type="checkbox" id="attachMode" /><span>Уже запущен локальный SOCKS</span></label>
         <div class="form-grid">
-          <label>Хост<input id="attachHost" value="127.0.0.1" /></label>
-          <label>Порт<input id="attachPort" type="number" /></label>
-          <label>Порт Starlit<input id="socksPort" type="number" /></label>
+          <label class="field compact">Хост<input id="attachHost" value="127.0.0.1" /></label>
+          <label class="field compact">Порт<input id="attachPort" type="number" /></label>
+          <label class="field compact">Порт Starlit<input id="socksPort" type="number" /></label>
         </div>
       </details>
-      <div class="form-actions">
+
+      <div class="form-actions sticky-actions">
         <button class="ghost" id="btn-core" type="button">Ядро Xray</button>
         <button class="primary" id="btn-save-settings" type="button">Сохранить</button>
       </div>
     </section>
   </main>
 
-  <div class="setup" id="setup" hidden>
-    <img class="empty-logo" src="../icons/logo.png" alt="" width="88" height="88" />
+  <div class="setup" id="setup" hidden role="dialog" aria-modal="true">
+    <img class="empty-logo" src="../icons/logo.png" alt="" width="72" height="72" />
     <p id="setup-text">Нужно один раз запустить установщик ядра. Откроется отдельная вкладка.</p>
     <button class="cabinet-btn hero" id="btn-setup" type="button">Включить StarlitVPN</button>
     <p class="setup-hint" id="setup-hint">Если Windows спросит, нажмите «Подробнее» → «Выполнить в любом случае».</p>
   </div>
-  <div class="toast" id="toast" hidden></div>
+  <div class="toast" id="toast" hidden role="status"></div>
   <script src="../lib/browser.js"></script>
   <script src="../lib/i18n.js"></script>
   <script src="../lib/config.js"></script>
